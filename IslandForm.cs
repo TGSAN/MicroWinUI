@@ -5,6 +5,9 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using Windows.UI.Xaml;
 using Windows.UI.ViewManagement;
+using System.Xml.Linq;
+using System.Runtime;
+using Microsoft.Win32;
 
 namespace MicroWinUICore
 {
@@ -64,6 +67,22 @@ namespace MicroWinUICore
                 Invoke(UpdateTheme);
             };
             this.Load += IslandForm_Load;
+            this.Activated += IslandWindow_Activated; ;
+        }
+
+        private void IslandWindow_Activated(object sender, EventArgs e)
+        {
+            bool isDarkMode = IsAppDarkMode();
+            bool colorPrevalence = IsColorPrevalence();
+            if (colorPrevalence)
+            {
+                // 覆盖颜色
+                SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, isDarkMode ? 0x00202020 : 0x00F3F3F3, sizeof(int));
+            }
+            else
+            {
+                SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, 0xFFFFFFFF, sizeof(int));
+            }
         }
 
         private bool IsColorLight(Windows.UI.Color clr)
@@ -88,7 +107,7 @@ namespace MicroWinUICore
             this.AutoScaleDimensions = new SizeF(96F, 96F);
             this.AutoScaleMode = AutoScaleMode.Dpi;
             this.BackColor = Color.Transparent;
-            
+
             // Add XAML Island
             this.Controls.Add(xamlHost);
             xamlHost.Dock = DockStyle.Fill;
@@ -98,7 +117,12 @@ namespace MicroWinUICore
         {
             bool isDarkMode = IsAppDarkMode();
             _actualTheme = isDarkMode ? ElementTheme.Dark : ElementTheme.Light;
-            SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE, isDarkMode ? 1 : 0, sizeof(int));
+            var attribute = Win32API.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1;
+            if (IsWindows10OrGreater(18985))
+            {
+                attribute = Win32API.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE;
+            }
+            SetWindowAttribute(Handle, attribute, isDarkMode ? 1 : 0, sizeof(int));
         }
 
         private void UpdateBackdrop()
@@ -149,6 +173,37 @@ namespace MicroWinUICore
             return result;
         }
 
+        private static int SetWindowCompositionAttribute(IntPtr hWnd)
+        {
+            //int _blurOpacity = 0; /* 0-255 如果为0，颜色不能设置纯黑000000 */
+            int _blurOpacity = 32; /* 0-255 如果为0，颜色不能设置纯黑000000 */
+            int _blurBackgroundColor = 0xFFFFFF; /* Drak BGR color format */
+            // int _blurBackgroundColor = 0xE6E6E6; /* Drak BGR color format */
+
+            var accent = new Win32API.AccentPolicy {
+                AccentState = Win32API.AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT,
+                GradientColor = (_blurOpacity << 24) | (_blurBackgroundColor & 0xFFFFFF)
+            };
+
+            var accentStructSize = Marshal.SizeOf(accent);
+
+            var accentPtr = Marshal.AllocHGlobal(accentStructSize);
+            Marshal.StructureToPtr(accent, accentPtr, false);
+
+            var data = new Win32API.WindowCompositionAttributeData
+            {
+                Attribute = Win32API.WindowCompositionAttribute.WCA_ACCENT_POLICY,
+                SizeOfData = accentStructSize,
+                Data = accentPtr
+            };
+
+            var result = Win32API.SetWindowCompositionAttribute(hWnd, ref data);
+
+            Marshal.FreeHGlobal(accentPtr);
+
+            return result;
+        }
+
         private static int CheckHResult(int result)
         {
             if (Marshal.GetExceptionForHR(result) is { } ex) throw ex;
@@ -162,9 +217,27 @@ namespace MicroWinUICore
             return isDark;
         }
 
+        public bool IsColorPrevalence()
+        {
+            string registData = "0"; // 默认0，不上色
+            try
+            {
+                RegistryKey reg_HKCU = Registry.CurrentUser;
+                RegistryKey reg_ThemesPersonalize = reg_HKCU.OpenSubKey(@"Software\Microsoft\Windows\DWM", false); // false为只读，true为可写入
+                registData = reg_ThemesPersonalize.GetValue("ColorPrevalence").ToString();
+            }
+            catch { }
+            return registData == "1";
+        }
+
         protected override void OnPaintBackground(PaintEventArgs e)
         {
             // Transparent
+        }
+
+        private static bool IsWindows10OrGreater(int build = -1)
+        {
+            return Environment.OSVersion.Version.Major >= 10 && Environment.OSVersion.Version.Build >= build;
         }
     }
 }
