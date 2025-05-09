@@ -11,11 +11,15 @@
     <!-- Add workaround for WinRT support in the old .NET SDK -->
     <SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
     <PlatformTarget>AnyCPU</PlatformTarget>
-	<MileXamlNoSunValleyXamlStyle>false</MileXamlNoSunValleyXamlStyle>
+	<MileXamlNoSunValleyXamlStyle>true</MileXamlNoSunValleyXamlStyle>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="Mile.Xaml" Version="2.2.890" />
+    <PackageReference Include="Costura.Fody" Version="3.3.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="Mile.Xaml" Version="2.3.1064" />
   </ItemGroup>
 
 </Project>
