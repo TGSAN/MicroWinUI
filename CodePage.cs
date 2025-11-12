@@ -1,16 +1,18 @@
 ﻿using MicroWinUICore;
 using System;
+using System.Diagnostics;
 using System.IO;
 using Windows.Graphics.Display;
+using Windows.Media.Core;
+using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Windows.Media.Core;
-using System.Diagnostics;
 
 namespace MicroWinUI
 {
     internal class CodePage : Page
     {
+        CoreWindow rtCoreWindow;
         IslandWindow coreWindow;
         DisplayInformation displayInfo;
         StackPanel mainStackPanel;
@@ -22,6 +24,7 @@ namespace MicroWinUI
 
         public CodePage(IslandWindow coreWindow)
         {
+            this.rtCoreWindow = CoreWindow.GetForCurrentThread();
             this.coreWindow = coreWindow;
             displayInfo = DisplayInformation.GetForCurrentView();
             displayInfo.AdvancedColorInfoChanged += DisplayInfo_AdvancedColorInfoChanged;
@@ -111,9 +114,32 @@ namespace MicroWinUI
 
         private void MainStackPanel_Loaded(object sender, RoutedEventArgs e)
         {
-            if (sdrDemoPlayer != null && hdrDemoPlayer != null) {
+            if (sdrDemoPlayer != null && hdrDemoPlayer != null)
+            {
                 sdrDemoPlayer.MediaPlayer.Play();
                 hdrDemoPlayer.MediaPlayer.Play();
+                hdrDemoPlayer.MediaPlayer.PlaybackSession.PositionChanged += (s2, ev2) =>
+                {
+                    _ = this.rtCoreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
+                    () =>
+                    {
+                        var timeDiffMs = Math.Abs((hdrDemoPlayer.MediaPlayer.PlaybackSession.Position - sdrDemoPlayer.MediaPlayer.PlaybackSession.Position).TotalMilliseconds);
+                        Debug.WriteLine($"{sdrDemoPlayer.MediaPlayer.PlaybackSession.Position}, {hdrDemoPlayer.MediaPlayer.PlaybackSession.Position}");
+                        Debug.WriteLine($"时间差：{timeDiffMs}");
+                        if (timeDiffMs > 1)
+                        {
+                            Debug.WriteLine("同步时间轴");
+                            sdrDemoPlayer.MediaPlayer.Pause();
+                            hdrDemoPlayer.MediaPlayer.Pause();
+                            sdrDemoPlayer.MediaPlayer.PlaybackSession.Position = TimeSpan.Zero;
+                            sdrDemoPlayer.MediaPlayer.PlaybackSession.Position = hdrDemoPlayer.MediaPlayer.PlaybackSession.Position;
+                            hdrDemoPlayer.MediaPlayer.PlaybackSession.Position = TimeSpan.Zero;
+                            hdrDemoPlayer.MediaPlayer.PlaybackSession.Position = sdrDemoPlayer.MediaPlayer.PlaybackSession.Position;
+                            sdrDemoPlayer.MediaPlayer.Play();
+                            hdrDemoPlayer.MediaPlayer.Play();
+                        }
+                    });
+                };
             }
         }
 
