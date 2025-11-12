@@ -1,15 +1,11 @@
 ﻿using MicroWinUICore;
 using System;
-using System.Collections.Generic;
-using System.Diagnostics;
-using System.Drawing;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
-using Windows.ApplicationModel.Core;
+using System.IO;
 using Windows.Graphics.Display;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Windows.Media.Core;
+using System.Diagnostics;
 
 namespace MicroWinUI
 {
@@ -19,6 +15,10 @@ namespace MicroWinUI
         DisplayInformation displayInfo;
         StackPanel mainStackPanel;
         TextBlock displayInfoTextBlock;
+        string sdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\SDRSample.mkv";
+        string hdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\HDRSample.mkv";
+        MediaPlayerElement sdrDemoPlayer;
+        MediaPlayerElement hdrDemoPlayer;
 
         public CodePage(IslandWindow coreWindow)
         {
@@ -32,18 +32,89 @@ namespace MicroWinUI
             mainStackPanel.VerticalAlignment = VerticalAlignment.Center;
             displayInfoTextBlock = new TextBlock();
             mainStackPanel.Children.Add(displayInfoTextBlock);
+            var buttonsStackPanel = new StackPanel();
+            buttonsStackPanel.Orientation = Orientation.Horizontal;
+            buttonsStackPanel.HorizontalAlignment = HorizontalAlignment.Center;
+            buttonsStackPanel.VerticalAlignment = VerticalAlignment.Center;
+            var openHdrSettingsButton = new Button();
+            openHdrSettingsButton.Content = "HDR 设置";
+            openHdrSettingsButton.CornerRadius = new CornerRadius(4);
+            openHdrSettingsButton.Click += OpenHdrSettingsButton_Click;
+            openHdrSettingsButton.Margin = new Thickness(0, 0, 16, 0);
+            buttonsStackPanel.Children.Add(openHdrSettingsButton);
             var restartButton = new Button();
-            if (Application.Current.Resources.TryGetValue("ButtonRevealStyle", out var style))
-            {
-                restartButton.Style = style as Style;
-            }
-            restartButton.Content = "切换数据到窗口所在显示器";
+            restartButton.Content = "重启程序";
+            restartButton.CornerRadius = new CornerRadius(4);
             restartButton.Click += RestartButton_Click;
-            mainStackPanel.Children.Add(restartButton);
+            buttonsStackPanel.Children.Add(restartButton);
+            mainStackPanel.Children.Add(buttonsStackPanel);
+            if (File.Exists(sdrDemoPath) && File.Exists(hdrDemoPath))
+            {
+                var sdrHdrStackPanel = new StackPanel();
+                restartButton.CornerRadius = new CornerRadius(4);
+                restartButton.BorderThickness = new Thickness(2);
+                sdrHdrStackPanel.Orientation = Orientation.Horizontal;
+                sdrHdrStackPanel.HorizontalAlignment = HorizontalAlignment.Center;
+                sdrHdrStackPanel.VerticalAlignment = VerticalAlignment.Center;
+                var sdrStackPanel = new StackPanel();
+                sdrStackPanel.Orientation = Orientation.Vertical;
+                sdrDemoPlayer = new MediaPlayerElement();
+                sdrDemoPlayer.AutoPlay = true;
+                sdrDemoPlayer.AreTransportControlsEnabled = false;
+                sdrDemoPlayer.Source = MediaSource.CreateFromUri(new Uri(sdrDemoPath));
+                sdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
+                sdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
+                sdrDemoPlayer.MediaPlayer.IsMuted = true;
+                sdrDemoPlayer.Width = 160;
+                sdrDemoPlayer.Height = 90;
+                sdrDemoPlayer.Margin = new Thickness(0, 0, 16, 0);
+                sdrStackPanel.Children.Add(sdrDemoPlayer);
+                var sdrTextBlock = new TextBlock();
+                sdrTextBlock.Text = "SDR";
+                sdrTextBlock.FontSize = 9;
+                sdrTextBlock.HorizontalAlignment = HorizontalAlignment.Center;
+                sdrTextBlock.VerticalAlignment = VerticalAlignment.Center;
+                sdrStackPanel.Children.Add(sdrTextBlock);
+                sdrHdrStackPanel.Children.Add(sdrStackPanel);
+                var hdrStackPanel = new StackPanel();
+                hdrStackPanel.Orientation = Orientation.Vertical;
+                hdrDemoPlayer = new MediaPlayerElement();
+                hdrDemoPlayer.AutoPlay = true;
+                hdrDemoPlayer.AreTransportControlsEnabled = false;
+                hdrDemoPlayer.Source = MediaSource.CreateFromUri(new Uri(hdrDemoPath));
+                hdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
+                hdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
+                hdrDemoPlayer.MediaPlayer.IsMuted = true;
+                hdrDemoPlayer.Width = 160;
+                hdrDemoPlayer.Height = 90;
+                hdrStackPanel.Children.Add(hdrDemoPlayer);
+                var hdrTextBlock = new TextBlock();
+                hdrTextBlock.Text = "HDR";
+                hdrTextBlock.FontSize = 9;
+                hdrTextBlock.HorizontalAlignment = HorizontalAlignment.Center;
+                hdrTextBlock.VerticalAlignment = VerticalAlignment.Center;
+                hdrStackPanel.Children.Add(hdrTextBlock);
+                sdrHdrStackPanel.Children.Add(hdrStackPanel);
+                mainStackPanel.Children.Add(sdrHdrStackPanel);
+            }
             Content = mainStackPanel;
             InvalidateArrange();
             coreWindow.Backdrop = IslandWindow.SystemBackdrop.Tabbed;
             UpdateDisplayInfo();
+            mainStackPanel.Loaded += MainStackPanel_Loaded;
+        }
+
+        private void OpenHdrSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            Process.Start("ms-settings:display-hdr");
+        }
+
+        private void MainStackPanel_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sdrDemoPlayer != null && hdrDemoPlayer != null) {
+                sdrDemoPlayer.MediaPlayer.Play();
+                hdrDemoPlayer.MediaPlayer.Play();
+            }
         }
 
         private void RestartButton_Click(object sender, RoutedEventArgs e)
