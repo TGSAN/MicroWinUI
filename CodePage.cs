@@ -36,23 +36,29 @@ namespace MicroWinUI
             this.rtCoreWindow = CoreWindow.GetForCurrentThread();
             this.coreWindow = coreWindow;
             brightnessOverride = BrightnessOverride.GetForCurrentView();
+            brightnessOverride.IsOverrideActiveChanged += (s, e) =>
+            {
+                var brightnessSettings = BrightnessOverrideSettings.CreateFromLevel(s.BrightnessLevel);
+                Debug.WriteLine($"IsOverrideActiveChanged: {s.IsOverrideActive}");
+                Debug.WriteLine($"BrightnessLevelChanged: {s.BrightnessLevel}, {brightnessSettings.DesiredNits} Nits");
+                //BrightnessPersistence.TryPersistBrightness(s.BrightnessLevel);
+                _ = this.rtCoreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
+                    () =>
+                    {
+                        UpdateDisplayInfo();
+                    });
+            };
+            brightnessOverride.StartOverride();
             displayEnhancementOverride = DisplayEnhancementOverride.GetForCurrentView();
             var colorSettings = ColorOverrideSettings.CreateFromDisplayColorOverrideScenario(DisplayColorOverrideScenario.Accurate);
             displayEnhancementOverride.ColorOverrideSettings = colorSettings;
-            if (displayEnhancementOverride.CanOverride) 
+            if (displayEnhancementOverride.CanOverride)
             {
                 displayEnhancementOverride.RequestOverride();
             }
-            brightnessOverride.IsOverrideActiveChanged += (s, e) =>
-            {
-                Debug.WriteLine($"IsOverrideActiveChanged: {s.IsOverrideActive}");
-                Debug.WriteLine($"BrightnessLevelChanged: {s.BrightnessLevel}");
-            };
-            var brightnessSettings = BrightnessOverrideSettings.CreateFromNits(172);
-            
-            Debug.WriteLine(brightnessSettings.DesiredLevel);
-            brightnessOverride.StartOverride();
-            brightnessOverride.SetBrightnessLevel(brightnessSettings.DesiredLevel, DisplayBrightnessOverrideOptions.None);
+            //var brightnessSettings = BrightnessOverrideSettings.CreateFromNits(80);
+            //brightnessOverride.SetBrightnessLevel(brightnessSettings.DesiredLevel, DisplayBrightnessOverrideOptions.None);
+            brightnessOverride.SetBrightnessScenario(DisplayBrightnessScenario.DefaultBrightness, DisplayBrightnessOverrideOptions.None);
             displayInfo = DisplayInformation.GetForCurrentView();
             displayInfo.AdvancedColorInfoChanged += DisplayInfo_AdvancedColorInfoChanged;
             mainStackPanel = new StackPanel();
@@ -239,6 +245,7 @@ namespace MicroWinUI
         private void UpdateDisplayInfo()
         {
             var capabilities = displayEnhancementOverride.GetCurrentDisplayEnhancementOverrideCapabilities();
+            var currentBrightnessSettings = BrightnessOverrideSettings.CreateFromLevel(brightnessOverride.BrightnessLevel);
             var colorInfo = displayInfo.GetAdvancedColorInfo();
             var advancedColor = colorInfo.CurrentAdvancedColorKind;
             var advancedColorStr = "SDR";
@@ -261,12 +268,14 @@ namespace MicroWinUI
             var displayInfoStringBuilder = new StringBuilder();
             displayInfoStringBuilder.AppendLine($"系统亮度调节：{(capabilities.IsBrightnessControlSupported ? "支持" : "不支持")}");
             displayInfoStringBuilder.AppendLine($"精确式系统亮度调节：{(capabilities.IsBrightnessNitsControlSupported ? "支持" : "不支持")}");
-            if (nitsRanges.Count > 0) 
+            if (nitsRanges.Count > 0)
             {
                 displayInfoStringBuilder.AppendLine($"精确式系统亮度调节精度：{nitsRanges[0].StepSizeNits} 尼特");
                 displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最高亮度：{nitsRanges[0].MaxNits} 尼特");
                 displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最低亮度：{nitsRanges[0].MinNits} 尼特");
             }
+            displayInfoStringBuilder.AppendLine($"");
+            displayInfoStringBuilder.AppendLine($"系统 SDR 亮度: {currentBrightnessSettings.DesiredLevel}% ({currentBrightnessSettings.DesiredNits} 尼特)");
             displayInfoStringBuilder.AppendLine($"");
             displayInfoStringBuilder.AppendLine($"HDR10：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持")}");
             displayInfoStringBuilder.AppendLine($"HDR10+：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10Plus) ? "支持" : "不支持")}");
