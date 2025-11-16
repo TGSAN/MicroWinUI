@@ -118,26 +118,17 @@ namespace MicroWinUI
             {
                 sdrDemoPlayer.MediaPlayer.Play();
                 hdrDemoPlayer.MediaPlayer.Play();
-                hdrDemoPlayer.MediaPlayer.PlaybackSession.PositionChanged += (s2, ev2) =>
+                hdrDemoPlayer.MediaPlayer.PlaybackSession.SeekCompleted += (s, ev) =>
                 {
                     _ = this.rtCoreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
                     () =>
                     {
-                        var timeDiffMs = Math.Abs((hdrDemoPlayer.MediaPlayer.PlaybackSession.Position - sdrDemoPlayer.MediaPlayer.PlaybackSession.Position).TotalMilliseconds);
-                        Debug.WriteLine($"{sdrDemoPlayer.MediaPlayer.PlaybackSession.Position}, {hdrDemoPlayer.MediaPlayer.PlaybackSession.Position}");
-                        Debug.WriteLine($"时间差：{timeDiffMs}");
-                        if (timeDiffMs > 1)
-                        {
-                            Debug.WriteLine("同步时间轴");
-                            sdrDemoPlayer.MediaPlayer.Pause();
-                            hdrDemoPlayer.MediaPlayer.Pause();
-                            sdrDemoPlayer.MediaPlayer.PlaybackSession.Position = TimeSpan.Zero;
-                            sdrDemoPlayer.MediaPlayer.PlaybackSession.Position = hdrDemoPlayer.MediaPlayer.PlaybackSession.Position;
-                            hdrDemoPlayer.MediaPlayer.PlaybackSession.Position = TimeSpan.Zero;
-                            hdrDemoPlayer.MediaPlayer.PlaybackSession.Position = sdrDemoPlayer.MediaPlayer.PlaybackSession.Position;
-                            sdrDemoPlayer.MediaPlayer.Play();
-                            hdrDemoPlayer.MediaPlayer.Play();
-                        }
+                        Debug.WriteLine("SeekCompleted sync position");
+                        hdrDemoPlayer.MediaPlayer.Pause();
+                        sdrDemoPlayer.MediaPlayer.Pause();
+                        sdrDemoPlayer.MediaPlayer.PlaybackSession.Position = hdrDemoPlayer.MediaPlayer.PlaybackSession.Position;
+                        hdrDemoPlayer.MediaPlayer.Play();
+                        sdrDemoPlayer.MediaPlayer.Play();
                     });
                 };
             }
