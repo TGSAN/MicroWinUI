@@ -2,6 +2,12 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using System.Text;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+using Windows.Devices.Display;
+using Windows.Devices.Enumeration;
+using Windows.Foundation.Metadata;
 using Windows.Graphics.Display;
 using Windows.Media.Core;
 using Windows.UI.Core;
@@ -14,6 +20,8 @@ namespace MicroWinUI
     {
         CoreWindow rtCoreWindow;
         IslandWindow coreWindow;
+        DisplayEnhancementOverride displayEnhancementOverride;
+        BrightnessOverride brightnessOverride;
         DisplayInformation displayInfo;
         StackPanel mainStackPanel;
         TextBlock displayInfoTextBlock;
@@ -21,11 +29,30 @@ namespace MicroWinUI
         string hdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\HDRSample.mkv";
         MediaPlayerElement sdrDemoPlayer;
         MediaPlayerElement hdrDemoPlayer;
+        List<DisplayMonitor> monitors = new List<DisplayMonitor>();
 
         public CodePage(IslandWindow coreWindow)
         {
             this.rtCoreWindow = CoreWindow.GetForCurrentThread();
             this.coreWindow = coreWindow;
+            brightnessOverride = BrightnessOverride.GetForCurrentView();
+            displayEnhancementOverride = DisplayEnhancementOverride.GetForCurrentView();
+            var colorSettings = ColorOverrideSettings.CreateFromDisplayColorOverrideScenario(DisplayColorOverrideScenario.Accurate);
+            displayEnhancementOverride.ColorOverrideSettings = colorSettings;
+            if (displayEnhancementOverride.CanOverride) 
+            {
+                displayEnhancementOverride.RequestOverride();
+            }
+            brightnessOverride.IsOverrideActiveChanged += (s, e) =>
+            {
+                Debug.WriteLine($"IsOverrideActiveChanged: {s.IsOverrideActive}");
+                Debug.WriteLine($"BrightnessLevelChanged: {s.BrightnessLevel}");
+            };
+            var brightnessSettings = BrightnessOverrideSettings.CreateFromNits(172);
+            
+            Debug.WriteLine(brightnessSettings.DesiredLevel);
+            brightnessOverride.StartOverride();
+            brightnessOverride.SetBrightnessLevel(brightnessSettings.DesiredLevel, DisplayBrightnessOverrideOptions.None);
             displayInfo = DisplayInformation.GetForCurrentView();
             displayInfo.AdvancedColorInfoChanged += DisplayInfo_AdvancedColorInfoChanged;
             mainStackPanel = new StackPanel();
@@ -107,13 +134,83 @@ namespace MicroWinUI
             mainStackPanel.Loaded += MainStackPanel_Loaded;
         }
 
+        private async Task LoadMonitorsAsync()
+        {
+            try
+            {
+                var selector = DisplayMonitor.GetDeviceSelector();
+                var devices = await DeviceInformation.FindAllAsync(selector);
+                if (devices.Count == 0)
+                {
+                    Debug.WriteLine("No DisplayMonitor devices found.");
+                    return;
+                }
+
+                monitors.Clear();
+                foreach (var di in devices)
+                {
+                    try
+                    {
+                        DisplayMonitor monitor = null;
+                        // Prefer FromInterfaceIdAsync when available; the Id returned by this selector is typically a device interface id
+                        if (ApiInformation.IsMethodPresent("Windows.Devices.Display.DisplayMonitor", "FromInterfaceIdAsync"))
+                        {
+                            monitor = await DisplayMonitor.FromInterfaceIdAsync(di.Id);
+                        }
+                        else
+                        {
+                            monitor = await DisplayMonitor.FromIdAsync(di.Id);
+                        }
+
+                        if (monitor != null)
+                        {
+                            monitors.Add(monitor);
+                            Debug.WriteLine($"Display device: {di.Name} | Kind: {di.Kind} | Id: {di.Id} -> DisplayMonitor obtained: {monitor.DisplayName} ({monitor.ConnectionKind}, {monitor.UsageKind})");
+                            Debug.WriteLine($"Dolby Vision: {monitor.IsDolbyVisionSupportedInHdrMode}");
+                            Debug.WriteLine($"Dolby Vision: {monitor.IsDolbyVisionSupportedInHdrMode}");
+                        }
+                        else
+                        {
+                            Debug.WriteLine($"Display device: {di.Name} | Id: {di.Id} -> DisplayMonitor is null.");
+                        }
+                    }
+                    catch (FileNotFoundException fnf)
+                    {
+                        Debug.WriteLine($"DisplayMonitor not found for {di.Name} | Id: {di.Id}. FileNotFoundException: {fnf.Message}");
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"Failed to create DisplayMonitor for device {di.Name} | Id: {di.Id}. Exception: {ex}");
+                    }
+                }
+
+                // dump properties of first device for diagnostics
+                try
+                {
+                    foreach (var key in devices[0].Properties.Keys)
+                    {
+                        Debug.WriteLine($"Property Key: {key} | Value: {devices[0].Properties[key]}");
+                    }
+                    Debug.WriteLine($"Display device: {devices[0].Name} | Id: {devices[0].Id}");
+                }
+                catch { }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Display enumeration failed: {ex}");
+            }
+        }
+
         private void OpenHdrSettingsButton_Click(object sender, RoutedEventArgs e)
         {
             Process.Start("ms-settings:display-hdr");
         }
 
-        private void MainStackPanel_Loaded(object sender, RoutedEventArgs e)
+        private async void MainStackPanel_Loaded(object sender, RoutedEventArgs e)
         {
+            // Ensure monitors are resolved asynchronously on UI thread
+            await LoadMonitorsAsync();
+
             if (sdrDemoPlayer != null && hdrDemoPlayer != null)
             {
                 sdrDemoPlayer.MediaPlayer.Play();
@@ -141,6 +238,7 @@ namespace MicroWinUI
 
         private void UpdateDisplayInfo()
         {
+            var capabilities = displayEnhancementOverride.GetCurrentDisplayEnhancementOverrideCapabilities();
             var colorInfo = displayInfo.GetAdvancedColorInfo();
             var advancedColor = colorInfo.CurrentAdvancedColorKind;
             var advancedColorStr = "SDR";
@@ -159,18 +257,33 @@ namespace MicroWinUI
                     advancedColorStr = advancedColor.ToString();
                     break;
             }
-            displayInfoTextBlock.Text = $"最高亮度（峰值）：{colorInfo.MaxLuminanceInNits} 尼特";
-            displayInfoTextBlock.Text += $"\r\n最高亮度（全屏）：{colorInfo.MaxAverageFullFrameLuminanceInNits} 尼特";
-            displayInfoTextBlock.Text += $"\r\n最低亮度：{colorInfo.MinLuminanceInNits} 尼特";
-            displayInfoTextBlock.Text += $"\r\nSDR亮度：{colorInfo.SdrWhiteLevelInNits} 尼特";
-            displayInfoTextBlock.Text += $"\r\n";
-            displayInfoTextBlock.Text += $"\r\n色彩模式：{advancedColorStr}";
-            displayInfoTextBlock.Text += $"\r\n";
-            displayInfoTextBlock.Text += $"\r\n红：{colorInfo.RedPrimary}";
-            displayInfoTextBlock.Text += $"\r\n绿：{colorInfo.GreenPrimary}";
-            displayInfoTextBlock.Text += $"\r\n蓝：{colorInfo.BluePrimary}";
-            displayInfoTextBlock.Text += $"\r\n";
-            displayInfoTextBlock.Text += $"\r\n白点：{colorInfo.WhitePoint}";
+            var nitsRanges = capabilities.GetSupportedNitRanges();
+            var displayInfoStringBuilder = new StringBuilder();
+            displayInfoStringBuilder.AppendLine($"系统亮度调节：{(capabilities.IsBrightnessControlSupported ? "支持" : "不支持")}");
+            displayInfoStringBuilder.AppendLine($"精确式系统亮度调节：{(capabilities.IsBrightnessNitsControlSupported ? "支持" : "不支持")}");
+            if (nitsRanges.Count > 0) 
+            {
+                displayInfoStringBuilder.AppendLine($"精确式系统亮度调节精度：{nitsRanges[0].StepSizeNits} 尼特");
+                displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最高亮度：{nitsRanges[0].MaxNits} 尼特");
+                displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最低亮度：{nitsRanges[0].MinNits} 尼特");
+            }
+            displayInfoStringBuilder.AppendLine($"");
+            displayInfoStringBuilder.AppendLine($"HDR10：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持")}");
+            displayInfoStringBuilder.AppendLine($"HDR10+：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10Plus) ? "支持" : "不支持")}");
+            displayInfoStringBuilder.AppendLine($"");
+            displayInfoStringBuilder.AppendLine($"最高 HDR 亮度（峰值）：{colorInfo.MaxLuminanceInNits} 尼特");
+            displayInfoStringBuilder.AppendLine($"最高 HDR 亮度（全屏）：{colorInfo.MaxAverageFullFrameLuminanceInNits} 尼特");
+            displayInfoStringBuilder.AppendLine($"最低亮度：{colorInfo.MinLuminanceInNits} 尼特");
+            displayInfoStringBuilder.AppendLine($"SDR 亮度：{colorInfo.SdrWhiteLevelInNits} 尼特");
+            displayInfoStringBuilder.AppendLine($"");
+            displayInfoStringBuilder.AppendLine($"色彩模式：{advancedColorStr}");
+            displayInfoStringBuilder.AppendLine($"");
+            displayInfoStringBuilder.AppendLine($"红：{colorInfo.RedPrimary}");
+            displayInfoStringBuilder.AppendLine($"绿：{colorInfo.GreenPrimary}");
+            displayInfoStringBuilder.AppendLine($"蓝：{colorInfo.BluePrimary}");
+            displayInfoStringBuilder.AppendLine($"");
+            displayInfoStringBuilder.AppendLine($"白点：{colorInfo.WhitePoint}");
+            displayInfoTextBlock.Text = displayInfoStringBuilder.ToString();
         }
 
         private void DisplayInfo_AdvancedColorInfoChanged(DisplayInformation sender, object args)
