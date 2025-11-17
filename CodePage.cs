@@ -155,15 +155,6 @@ namespace MicroWinUI
             openHdrCalibrationSettingsButton.Click += OpenHdrCalibrationSettingsButton_Click;
             buttonsStackPanel.Children.Add(openHdrCalibrationSettingsButton);
 
-            var restartButton = new Button
-            {
-                Content = "重启程序",
-                CornerRadius = new CornerRadius(4),
-                BorderThickness = new Thickness(1)
-            };
-            restartButton.Click += RestartButton_Click;
-            buttonsStackPanel.Children.Add(restartButton);
-
             rightPanel.Children.Add(buttonsStackPanel);
 
             var sdrBoostSliderPanel = new StackPanel
@@ -595,11 +586,6 @@ namespace MicroWinUI
                 };
             }
 
-        }
-
-        private void RestartButton_Click(object sender, RoutedEventArgs e)
-        {
-            coreWindowHost.Content = new CodePage(coreWindowHost);
         }
 
         private async void UpdateDisplayInfo()
