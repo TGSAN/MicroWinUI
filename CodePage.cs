@@ -196,6 +196,7 @@ namespace MicroWinUI
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            sdrBoostSlider.ValueChanged += SdrBoostSlider_ValueChanged;
             sdrBoostSliderPanel.Children.Add(sdrBoostSlider);
 
             rightPanel.Children.Add(sdrBoostSliderPanel);
@@ -305,6 +306,12 @@ namespace MicroWinUI
             InitializeWmiBrightnessWatcher();
         }
 
+        private void SdrBoostSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            var nits = (sdrBoostSlider.Value * 4) + 80; // 0-100 映射到 80-480 Nits
+            Debug.WriteLine($"Set {nits} Nits");
+        }
+
         private void CodePage_Unloaded(object sender, RoutedEventArgs e)
         {
             try { wmiBrightnessWatcher?.Dispose(); } catch { }
@@ -323,16 +330,12 @@ namespace MicroWinUI
                     wmiBrightnessWatcher = new WmiBrightnessWatcher(wmiInstance);
                     wmiBrightnessWatcher.BrightnessChanged += (s, b) =>
                     {
-                        // Only update UI; we could also reflect the value if needed
-                        _ = this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
-                        {
-                            Debug.WriteLine($"WMI BrightnessChanged: {b}% for {wmiInstance}");
-                            var brightnessLevel = b * 0.001;
-                            var nits = TryGetNitsFromBrightnessLevel(brightnessLevel);
-                            Debug.WriteLine($"{brightnessLevel}, {nits} Nits");
-                            //BrightnessPersistence.TryPersistBrightness(brightnessLevel);
-                            UpdateDisplayInfo();
-                        });
+                        Debug.WriteLine($"WMI BrightnessChanged: {b}% for {wmiInstance}");
+                        var brightnessLevel = b * 0.001;
+                        var nits = TryGetNitsFromBrightnessLevel(brightnessLevel);
+                        Debug.WriteLine($"{brightnessLevel}, {nits} Nits");
+                        //BrightnessPersistence.TryPersistBrightness(brightnessLevel);
+                        UpdateDisplayInfo();
                     };
                     wmiBrightnessWatcher.Start();
                 }
@@ -709,6 +712,8 @@ namespace MicroWinUI
                         addSeparator();
 
                         addRow("白点", colorInfo.WhitePoint.ToString());
+
+                        sdrBoostSlider.Value = ((colorInfo.SdrWhiteLevelInNits - 80) / 4); // 80-480 Nits 映射到 0-100 滑块
                     });
         }
 
