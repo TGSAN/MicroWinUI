@@ -13,13 +13,14 @@ using Windows.Media.Core;
 using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
+using Mile.Xaml.Interop;
 
 namespace MicroWinUI
 {
     internal class CodePage : Page
     {
-        CoreWindow rtCoreWindow;
-        IslandWindow coreWindow;
+        CoreWindow coreWindow = CoreWindow.GetForCurrentThread();
+        IslandWindow coreWindowHost;
         DisplayEnhancementOverride displayEnhancementOverride;
         BrightnessOverride brightnessOverride;
         DisplayInformation displayInfo;
@@ -31,10 +32,23 @@ namespace MicroWinUI
         MediaPlayerElement hdrDemoPlayer;
         List<DisplayMonitor> monitors = new List<DisplayMonitor>();
 
-        public CodePage(IslandWindow coreWindow)
+        public CodePage(IslandWindow coreWindowHost)
         {
-            this.rtCoreWindow = CoreWindow.GetForCurrentThread();
-            this.coreWindow = coreWindow;
+            this.coreWindowHost = coreWindowHost;
+            this.coreWindowHost.coreWindowHWND = this.coreWindow.GetInterop().GetWindowHandle();
+            new Task(async () =>
+            {
+                while (true)
+                {
+                    _ = coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
+                    () =>
+                    {
+                        var bounds = coreWindow.Bounds;
+                        Debug.WriteLine($"CodePage CoreWindow Bounds: {bounds.Width} x {bounds.Height}, X: {bounds.X}, Y: {bounds.Y}");
+                    });
+                    await Task.Delay(1000);
+                }
+            }).Start();
             brightnessOverride = BrightnessOverride.GetForCurrentView();
             brightnessOverride.IsOverrideActiveChanged += (s, e) =>
             {
@@ -42,7 +56,7 @@ namespace MicroWinUI
                 Debug.WriteLine($"IsOverrideActiveChanged: {s.IsOverrideActive}");
                 Debug.WriteLine($"BrightnessLevelChanged: {s.BrightnessLevel}, {brightnessSettings.DesiredNits} Nits");
                 //BrightnessPersistence.TryPersistBrightness(s.BrightnessLevel);
-                _ = this.rtCoreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
+                _ = this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
                     () =>
                     {
                         UpdateDisplayInfo();
@@ -135,7 +149,7 @@ namespace MicroWinUI
             }
             Content = mainStackPanel;
             InvalidateArrange();
-            coreWindow.Backdrop = IslandWindow.SystemBackdrop.Tabbed;
+            coreWindowHost.Backdrop = IslandWindow.SystemBackdrop.Tabbed;
             UpdateDisplayInfo();
             mainStackPanel.Loaded += MainStackPanel_Loaded;
         }
@@ -223,7 +237,7 @@ namespace MicroWinUI
                 hdrDemoPlayer.MediaPlayer.Play();
                 hdrDemoPlayer.MediaPlayer.PlaybackSession.SeekCompleted += (s, ev) =>
                 {
-                    _ = this.rtCoreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
+                    _ = this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
                     () =>
                     {
                         Debug.WriteLine("SeekCompleted sync position");
@@ -239,7 +253,7 @@ namespace MicroWinUI
 
         private void RestartButton_Click(object sender, RoutedEventArgs e)
         {
-            coreWindow.Content = new CodePage(coreWindow);
+            coreWindowHost.Content = new CodePage(coreWindowHost);
         }
 
         private void UpdateDisplayInfo()
@@ -267,15 +281,18 @@ namespace MicroWinUI
             var nitsRanges = capabilities.GetSupportedNitRanges();
             var displayInfoStringBuilder = new StringBuilder();
             displayInfoStringBuilder.AppendLine($"系统亮度调节：{(capabilities.IsBrightnessControlSupported ? "支持" : "不支持")}");
-            displayInfoStringBuilder.AppendLine($"精确式系统亮度调节：{(capabilities.IsBrightnessNitsControlSupported ? "支持" : "不支持")}");
-            if (nitsRanges.Count > 0)
+            if (capabilities.IsBrightnessControlSupported)
             {
-                displayInfoStringBuilder.AppendLine($"精确式系统亮度调节精度：{nitsRanges[0].StepSizeNits} 尼特");
-                displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最高亮度：{nitsRanges[0].MaxNits} 尼特");
-                displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最低亮度：{nitsRanges[0].MinNits} 尼特");
+                displayInfoStringBuilder.AppendLine($"精确式系统亮度调节：{(capabilities.IsBrightnessNitsControlSupported ? "支持" : "不支持")}");
+                if (nitsRanges.Count > 0)
+                {
+                    displayInfoStringBuilder.AppendLine($"精确式系统亮度调节精度：{nitsRanges[0].StepSizeNits} 尼特");
+                    displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最高亮度：{nitsRanges[0].MaxNits} 尼特");
+                    displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最低亮度：{nitsRanges[0].MinNits} 尼特");
+                }
+                displayInfoStringBuilder.AppendLine($"");
+                displayInfoStringBuilder.AppendLine($"系统 SDR 亮度: {currentBrightnessSettings.DesiredLevel * 100}%{(capabilities.IsBrightnessNitsControlSupported ? $" ({currentBrightnessSettings.DesiredNits} 尼特)" : "")}");
             }
-            displayInfoStringBuilder.AppendLine($"");
-            displayInfoStringBuilder.AppendLine($"系统 SDR 亮度: {currentBrightnessSettings.DesiredLevel}% ({currentBrightnessSettings.DesiredNits} 尼特)");
             displayInfoStringBuilder.AppendLine($"");
             displayInfoStringBuilder.AppendLine($"HDR10：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持")}");
             displayInfoStringBuilder.AppendLine($"HDR10+：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10Plus) ? "支持" : "不支持")}");

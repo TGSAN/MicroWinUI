@@ -8,6 +8,7 @@ using Windows.UI.ViewManagement;
 using System.Xml.Linq;
 using System.Runtime;
 using Microsoft.Win32;
+using Windows.UI.Core;
 
 namespace MicroWinUICore
 {
@@ -19,6 +20,20 @@ namespace MicroWinUICore
             Acrylic,
             Mica,
             Tabbed
+        }
+
+        IntPtr _coreWindowHWND = IntPtr.Zero;
+        public IntPtr coreWindowHWND
+        {
+            get
+            {
+                return _coreWindowHWND;
+            }
+            set
+            {
+                _coreWindowHWND = value;
+                UpdateCoreWindowPos();
+            }
         }
 
         UISettings uiSettings = new UISettings();
@@ -57,6 +72,7 @@ namespace MicroWinUICore
             set
             {
                 xamlHost.Child = value;
+                UpdateCoreWindowPos();
             }
         }
 
@@ -66,8 +82,49 @@ namespace MicroWinUICore
             {
                 Invoke(UpdateTheme);
             };
+            xamlHost.HandleCreated += XamlHost_HandleCreated;
+            xamlHost.SizeChanged += XamlHost_SizeChanged;
             this.Load += IslandForm_Load;
-            this.Activated += IslandWindow_Activated; ;
+            this.Activated += IslandWindow_Activated;
+            this.Resize += IslandWindow_Resize;
+            this.Move += IslandWindow_Move;
+        }
+
+        private void XamlHost_SizeChanged(object sender, EventArgs e)
+        {
+            UpdateCoreWindowPos();
+        }
+
+        private void XamlHost_HandleCreated(object sender, EventArgs e)
+        {
+            UpdateCoreWindowPos();
+        }
+
+        private void IslandWindow_Move(object sender, EventArgs e)
+        {
+            UpdateCoreWindowPos();
+        }
+
+        private void IslandWindow_Resize(object sender, EventArgs e)
+        {
+            UpdateCoreWindowPos();
+        }
+
+        private void UpdateCoreWindowPos()
+        {
+            if (coreWindowHWND != IntPtr.Zero && xamlHost.IsHandleCreated)
+            {
+                Rectangle rect = xamlHost.RectangleToScreen(xamlHost.ClientRectangle);
+                Win32API.SetWindowPos(
+                    coreWindowHWND,
+                    Win32API.HWND_TOP,
+                    rect.Left,
+                    rect.Top,
+                    rect.Width,
+                    rect.Height,
+                    Win32API.SWP_NOZORDER | Win32API.SWP_NOACTIVATE
+                );
+            }
         }
 
         private void IslandWindow_Activated(object sender, EventArgs e)
