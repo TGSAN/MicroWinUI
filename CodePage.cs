@@ -105,7 +105,8 @@ namespace MicroWinUI
             {
                 FontSize = 13,
                 TextWrapping = TextWrapping.Wrap,
-                MaxWidth = 480
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                MaxWidth = 240
             };
 
             leftCard = new Border
@@ -232,11 +233,11 @@ namespace MicroWinUI
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Center
             };
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
             horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(8) });
             horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(24) });
             Grid.SetColumn(leftCard, 1);
             Grid.SetColumn(rightCard, 3);
 
