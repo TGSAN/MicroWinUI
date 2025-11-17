@@ -517,7 +517,7 @@ namespace MicroWinUI
                 var infinite = new Size(double.PositiveInfinity, double.PositiveInfinity);
                 leftCard.Measure(infinite);
                 rightCard.Measure(infinite);
-                double requiredWidth = leftCard.DesiredSize.Width + rightCard.DesiredSize.Width + 32;
+                double requiredWidth = leftCard.DesiredSize.Width + rightCard.DesiredSize.Width + 192;
                 bool shouldBeHorizontal = requiredWidth <= availableWidth;
                 if (shouldBeHorizontal)
                 {
