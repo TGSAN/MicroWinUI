@@ -25,10 +25,11 @@ namespace MicroWinUI
         DisplayEnhancementOverride displayEnhancementOverride;
         BrightnessOverride brightnessOverride;
         DisplayInformation displayInfo;
+        ScrollViewer scrollViewer; // scroll container
         StackPanel mainStackPanel;
         TextBlock displayInfoTextBlock;
         StackPanel rightPanel; // holds buttons + sdr/hdr vertically
-        Grid horizontalContainer; // Grid with adaptive side + middle spacers
+        Grid horizontalContainer; // Grid with adaptive spacers
         StackPanel verticalContainer; // vertical stack of left/right sections
         string sdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\SDRSample.mkv";
         string hdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\HDRSample.mkv";
@@ -80,16 +81,19 @@ namespace MicroWinUI
             displayInfo = DisplayInformation.GetForCurrentView();
             displayInfo.AdvancedColorInfoChanged += DisplayInfo_AdvancedColorInfoChanged;
 
+            // Root stack panel that will host either verticalContainer or horizontalContainer (within ScrollViewer)
             mainStackPanel = new StackPanel
             {
+                Padding = new Thickness(0, 32, 0, 32),
                 Orientation = Orientation.Vertical,
                 Spacing = 32,
                 HorizontalAlignment = HorizontalAlignment.Center,
-                VerticalAlignment = VerticalAlignment.Center
+                VerticalAlignment = VerticalAlignment.Center // vertical center when content smaller than viewport
             };
 
             displayInfoTextBlock = new TextBlock
             {
+                Margin = new Thickness(24, 0, 24, bottom: 0),
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 480
             };
@@ -133,7 +137,6 @@ namespace MicroWinUI
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                restartButton.CornerRadius = new CornerRadius(4);
                 restartButton.BorderThickness = new Thickness(2);
                 var sdrStackPanel = new StackPanel { Orientation = Orientation.Vertical };
                 sdrDemoPlayer = new MediaPlayerElement
@@ -197,18 +200,25 @@ namespace MicroWinUI
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            // Five columns: left spacer, left content, middle spacer, right content, right spacer
-            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // left adaptive spacer
-            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // display info
-            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // middle adaptive spacer
-            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // right panel
-            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // right adaptive spacer
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             Grid.SetColumn(displayInfoTextBlock, 1);
             Grid.SetColumn(rightPanel, 3);
 
-            mainStackPanel.Children.Add(verticalContainer); // start vertical
+            // start vertical
+            mainStackPanel.Children.Add(verticalContainer);
 
-            Content = mainStackPanel;
+            scrollViewer = new ScrollViewer
+            {
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+                Content = mainStackPanel
+            };
+
+            Content = scrollViewer;
             InvalidateArrange();
             coreWindowHost.Backdrop = IslandWindow.SystemBackdrop.Tabbed;
             UpdateDisplayInfo();
@@ -224,7 +234,6 @@ namespace MicroWinUI
                 verticalContainer.Children.Remove(displayInfoTextBlock);
                 verticalContainer.Children.Remove(rightPanel);
                 horizontalContainer.Children.Clear();
-                // re-add with proper column indexes
                 Grid.SetColumn(displayInfoTextBlock, 1);
                 Grid.SetColumn(rightPanel, 3);
                 horizontalContainer.Children.Add(displayInfoTextBlock);
@@ -266,7 +275,7 @@ namespace MicroWinUI
                 var infinite = new Size(double.PositiveInfinity, double.PositiveInfinity);
                 displayInfoTextBlock.Measure(infinite);
                 rightPanel.Measure(infinite);
-                double requiredWidth = displayInfoTextBlock.DesiredSize.Width + rightPanel.DesiredSize.Width + 32; // base padding
+                double requiredWidth = displayInfoTextBlock.DesiredSize.Width + rightPanel.DesiredSize.Width + 32;
                 bool shouldBeHorizontal = requiredWidth <= availableWidth;
                 if (shouldBeHorizontal)
                 {
