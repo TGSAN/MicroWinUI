@@ -202,7 +202,7 @@ namespace MicroWinUI
                 VerticalAlignment = VerticalAlignment.Center
             };
             sdrBoostSlider.ValueChanged += SdrBoostSlider_ValueChanged;
-            sdrBoostSlider.ManipulationStarted += (s, e) =>
+            sdrBoostSlider.ManipulationStarting += (s, e) =>
             {
                 sdrBoostSliderDraging = true;
             };
@@ -353,19 +353,22 @@ namespace MicroWinUI
 
         private void SdrBoostSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
-            var nits = (((float)sdrBoostSlider.Value) * 4.0f) + 80; // 0-100 映射到 80-480 Nits
-            Debug.WriteLine($"Set {nits} Nits");
-            if (laptopKeepHDRBrightnessModeCheckbox != null && laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value)
+            if (sdrBoostSliderDraging)
             {
-                SystemBrightnessSyncByHDRBrightness(nits);
-            }
-            else
-            {
-                // Apply to the monitor that hosts this CoreWindow
-                var hwnd = coreWindowHost?.coreWindowHWND ?? IntPtr.Zero;
-                if (hwnd != IntPtr.Zero)
+                var nits = (((float)sdrBoostSlider.Value) * 4.0f) + 80; // 0-100 映射到 80-480 Nits
+                Debug.WriteLine($"Set {nits} Nits");
+                if (laptopKeepHDRBrightnessModeCheckbox != null && laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value)
                 {
-                    _ = SdrWhiteLevel.TrySetForWindow(hwnd, nits);
+                    SystemBrightnessSyncByHDRBrightness(nits);
+                }
+                else
+                {
+                    // Apply to the monitor that hosts this CoreWindow
+                    var hwnd = coreWindowHost?.coreWindowHWND ?? IntPtr.Zero;
+                    if (hwnd != IntPtr.Zero)
+                    {
+                        _ = SdrWhiteLevel.TrySetForWindow(hwnd, nits);
+                    }
                 }
             }
         }
@@ -780,7 +783,8 @@ namespace MicroWinUI
 
                         addRow("白点", colorInfo.WhitePoint.ToString());
 
-                        if (!sdrBoostSliderDraging) {
+                        if (!sdrBoostSliderDraging)
+                        {
                             sdrBoostSlider.Value = ((colorInfo.SdrWhiteLevelInNits - 80) / 4); // 80-480 Nits 映射到 0-100 滑块
                         }
                         if (capabilities.IsBrightnessNitsControlSupported)
