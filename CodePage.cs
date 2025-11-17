@@ -15,6 +15,9 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Mile.Xaml.Interop;
 using Windows.Foundation; // for Size
+using Windows.UI.Xaml.Media; // for Brush
+using Windows.UI; // for Color fallback
+using Windows.UI.ViewManagement; // for UISettings
 
 namespace MicroWinUI
 {
@@ -28,6 +31,8 @@ namespace MicroWinUI
         ScrollViewer scrollViewer; // scroll container
         StackPanel mainStackPanel;
         TextBlock displayInfoTextBlock;
+        Border leftCard;
+        Border rightCard;
         StackPanel rightPanel; // holds buttons + sdr/hdr vertically
         Grid horizontalContainer; // Grid with adaptive spacers
         StackPanel verticalContainer; // vertical stack of left/right sections
@@ -36,11 +41,16 @@ namespace MicroWinUI
         MediaPlayerElement sdrDemoPlayer;
         MediaPlayerElement hdrDemoPlayer;
         List<DisplayMonitor> monitors = new List<DisplayMonitor>();
+        UISettings uiSettings; // 监听系统颜色/主题变化
 
         public CodePage(IslandWindow coreWindowHost)
         {
             this.coreWindowHost = coreWindowHost;
             this.coreWindowHost.coreWindowHWND = this.coreWindow.GetInterop().GetWindowHandle();
+
+            uiSettings = new UISettings();
+            uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged; // 系统主题或强调色变化时触发
+
             new Task(async () =>
             {
                 while (true)
@@ -93,9 +103,18 @@ namespace MicroWinUI
 
             displayInfoTextBlock = new TextBlock
             {
-                Margin = new Thickness(24, 0, 24, bottom: 0),
+                FontSize = 13,
                 TextWrapping = TextWrapping.Wrap,
                 MaxWidth = 480
+            };
+
+            leftCard = new Border
+            {
+                Child = displayInfoTextBlock,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(16),
+                CornerRadius = new CornerRadius(4),
+                Margin = new Thickness(8, 0, 8, 0)
             };
 
             rightPanel = new StackPanel
@@ -104,6 +123,15 @@ namespace MicroWinUI
                 Spacing = 16,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
+            };
+
+            rightCard = new Border
+            {
+                Child = rightPanel,
+                BorderThickness = new Thickness(1),
+                Padding = new Thickness(16),
+                CornerRadius = new CornerRadius(4),
+                Margin = new Thickness(8, 0, 8, 0)
             };
 
             var buttonsStackPanel = new StackPanel
@@ -154,8 +182,10 @@ namespace MicroWinUI
                 sdrStackPanel.Children.Add(sdrDemoPlayer);
                 sdrStackPanel.Children.Add(new TextBlock
                 {
-                    Text = "SDR",
-                    FontSize = 9,
+                    Text = "SDR 内容",
+                    FontSize = 12,
+                    Opacity = 0.5,
+                    Margin = new Thickness(4),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 });
@@ -176,8 +206,10 @@ namespace MicroWinUI
                 hdrStackPanel.Children.Add(hdrDemoPlayer);
                 hdrStackPanel.Children.Add(new TextBlock
                 {
-                    Text = "HDR",
-                    FontSize = 9,
+                    Text = "HDR 内容",
+                    FontSize = 12,
+                    Opacity = 0.5,
+                    Margin = new Thickness(4),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 });
@@ -192,8 +224,8 @@ namespace MicroWinUI
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
-            verticalContainer.Children.Add(displayInfoTextBlock);
-            verticalContainer.Children.Add(rightPanel);
+            verticalContainer.Children.Add(leftCard);
+            verticalContainer.Children.Add(rightCard);
 
             horizontalContainer = new Grid
             {
@@ -205,8 +237,8 @@ namespace MicroWinUI
             horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
             horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
             horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            Grid.SetColumn(displayInfoTextBlock, 1);
-            Grid.SetColumn(rightPanel, 3);
+            Grid.SetColumn(leftCard, 1);
+            Grid.SetColumn(rightCard, 3);
 
             // start vertical
             mainStackPanel.Children.Add(verticalContainer);
@@ -224,20 +256,60 @@ namespace MicroWinUI
             UpdateDisplayInfo();
             mainStackPanel.Loaded += MainStackPanel_Loaded;
             this.SizeChanged += CodePage_SizeChanged;
+            this.Loaded += CodePage_Loaded;
             UpdateResponsiveLayout();
+        }
+
+        private void CodePage_Loaded(object sender, RoutedEventArgs e)
+        {
+            // await LoadMonitorsAsync();
+            // ensure layout evaluates once content is loaded
+            UpdateResponsiveLayout();
+            ApplyCardBackgroundForTheme(); // 初始化主题背景
+        }
+
+        private void UiSettings_ColorValuesChanged(UISettings sender, object args)
+        {
+            // 回到 UI 线程应用新背景
+            _ = coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
+                ApplyCardBackgroundForTheme();
+            });
+        }
+
+        private void ApplyCardBackgroundForTheme()
+        {
+            // 使用宿主的 ActualTheme 判断深浅色；IslandWindow 会在系统暗/亮模式改变时刷新内部值
+            var theme = coreWindowHost?.ActualTheme ?? ElementTheme.Light;
+            if (theme == ElementTheme.Dark)
+            {
+                // 深色：稍暗半透明
+                leftCard.Background = new SolidColorBrush(Color.FromArgb(0x0A, 0xFF, 0xFF, 0xFF));
+                leftCard.BorderBrush = new SolidColorBrush(Color.FromArgb(0x10, 0x00, 0x00, 0x00));
+                rightCard.Background = new SolidColorBrush(Color.FromArgb(0x0A, 0xFF, 0xFF, 0xFF));
+                rightCard.BorderBrush = new SolidColorBrush(Color.FromArgb(0x10, 0x00, 0x00, 0x00));
+            }
+            else
+            {
+                // 浅色：白色半透明
+                leftCard.Background = new SolidColorBrush(Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF));
+                leftCard.BorderBrush = new SolidColorBrush(Color.FromArgb(0x10, 0x00, 0x00, 0x00));
+                rightCard.Background = new SolidColorBrush(Color.FromArgb(0x80, 0xFF, 0xFF, 0xFF));
+                rightCard.BorderBrush = new SolidColorBrush(Color.FromArgb(0x10, 0x00, 0x00, 0x00));
+            }
         }
 
         private void SwitchToHorizontal()
         {
             if (mainStackPanel.Children.Count == 0 || mainStackPanel.Children[0] != horizontalContainer)
             {
-                verticalContainer.Children.Remove(displayInfoTextBlock);
-                verticalContainer.Children.Remove(rightPanel);
+                verticalContainer.Children.Remove(leftCard);
+                verticalContainer.Children.Remove(rightCard);
                 horizontalContainer.Children.Clear();
-                Grid.SetColumn(displayInfoTextBlock, 1);
-                Grid.SetColumn(rightPanel, 3);
-                horizontalContainer.Children.Add(displayInfoTextBlock);
-                horizontalContainer.Children.Add(rightPanel);
+                Grid.SetColumn(leftCard, 1);
+                Grid.SetColumn(rightCard, 3);
+                horizontalContainer.Children.Add(leftCard);
+                horizontalContainer.Children.Add(rightCard);
                 mainStackPanel.Children.Clear();
                 mainStackPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
                 mainStackPanel.Children.Add(horizontalContainer);
@@ -250,8 +322,8 @@ namespace MicroWinUI
             {
                 horizontalContainer.Children.Clear();
                 verticalContainer.Children.Clear();
-                verticalContainer.Children.Add(displayInfoTextBlock);
-                verticalContainer.Children.Add(rightPanel);
+                verticalContainer.Children.Add(leftCard);
+                verticalContainer.Children.Add(rightCard);
                 mainStackPanel.Children.Clear();
                 mainStackPanel.HorizontalAlignment = HorizontalAlignment.Center;
                 mainStackPanel.Children.Add(verticalContainer);
@@ -273,9 +345,9 @@ namespace MicroWinUI
                 }
 
                 var infinite = new Size(double.PositiveInfinity, double.PositiveInfinity);
-                displayInfoTextBlock.Measure(infinite);
-                rightPanel.Measure(infinite);
-                double requiredWidth = displayInfoTextBlock.DesiredSize.Width + rightPanel.DesiredSize.Width + 32;
+                leftCard.Measure(infinite);
+                rightCard.Measure(infinite);
+                double requiredWidth = leftCard.DesiredSize.Width + rightCard.DesiredSize.Width + 32;
                 bool shouldBeHorizontal = requiredWidth <= availableWidth;
                 if (shouldBeHorizontal)
                 {
@@ -397,8 +469,6 @@ namespace MicroWinUI
 
         private async void MainStackPanel_Loaded(object sender, RoutedEventArgs e)
         {
-            //await LoadMonitorsAsync();
-
             if (sdrDemoPlayer != null && hdrDemoPlayer != null)
             {
                 sdrDemoPlayer.MediaPlayer.Play();
@@ -418,8 +488,6 @@ namespace MicroWinUI
                 };
             }
 
-            // ensure layout evaluates once content is loaded
-            UpdateResponsiveLayout();
         }
 
         private void RestartButton_Click(object sender, RoutedEventArgs e)
@@ -468,7 +536,7 @@ namespace MicroWinUI
             displayInfoStringBuilder.AppendLine($"");
             displayInfoStringBuilder.AppendLine($"HDR10：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持")}");
             displayInfoStringBuilder.AppendLine($"HDR10+：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10Plus) ? "支持" : "不支持")}");
-            displayInfoStringBuilder.AppendLine($"Dolby Vision：{(currentDisplayMonitor.IsDolbyVisionSupportedInHdrMode ? "支持" : "不支持")}");
+            displayInfoStringBuilder.AppendLine($"Dolby Vision：{(currentDisplayMonitor?.IsDolbyVisionSupportedInHdrMode == true ? "支持" : "不支持")}");
             displayInfoStringBuilder.AppendLine($"");
             displayInfoStringBuilder.AppendLine($"最高 HDR 亮度（峰值）：{colorInfo.MaxLuminanceInNits} 尼特");
             displayInfoStringBuilder.AppendLine($"最高 HDR 亮度（全屏）：{colorInfo.MaxAverageFullFrameLuminanceInNits} 尼特");
@@ -482,7 +550,7 @@ namespace MicroWinUI
             displayInfoStringBuilder.AppendLine($"蓝：{colorInfo.BluePrimary}");
             displayInfoStringBuilder.AppendLine($"");
             displayInfoStringBuilder.AppendLine($"白点：{colorInfo.WhitePoint}");
-            displayInfoTextBlock.Text = displayInfoStringBuilder.ToString();
+            displayInfoTextBlock.Text = displayInfoStringBuilder.ToString().Trim();
         }
     }
 }
