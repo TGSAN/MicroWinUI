@@ -154,6 +154,11 @@ namespace MicroWinUI
             mainStackPanel.Loaded += MainStackPanel_Loaded;
         }
 
+        private void DisplayInfo_AdvancedColorInfoChanged(DisplayInformation sender, object args)
+        {
+            UpdateDisplayInfo();
+        }
+
         private async Task<DisplayMonitor> GetCurrentDisplayMonitorForCoreWindow()
         {
             try
@@ -281,8 +286,9 @@ namespace MicroWinUI
             coreWindowHost.Content = new CodePage(coreWindowHost);
         }
 
-        private void UpdateDisplayInfo()
+        private async void UpdateDisplayInfo()
         {
+            var currentDisplayMonitor = await GetCurrentDisplayMonitorForCoreWindow();
             var capabilities = displayEnhancementOverride.GetCurrentDisplayEnhancementOverrideCapabilities();
             var currentBrightnessSettings = BrightnessOverrideSettings.CreateFromLevel(brightnessOverride.BrightnessLevel);
             var colorInfo = displayInfo.GetAdvancedColorInfo();
@@ -321,6 +327,7 @@ namespace MicroWinUI
             displayInfoStringBuilder.AppendLine($"");
             displayInfoStringBuilder.AppendLine($"HDR10：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持")}");
             displayInfoStringBuilder.AppendLine($"HDR10+：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10Plus) ? "支持" : "不支持")}");
+            displayInfoStringBuilder.AppendLine($"Dolby Vision：{(currentDisplayMonitor.IsDolbyVisionSupportedInHdrMode ? "支持" : "不支持")}");
             displayInfoStringBuilder.AppendLine($"");
             displayInfoStringBuilder.AppendLine($"最高 HDR 亮度（峰值）：{colorInfo.MaxLuminanceInNits} 尼特");
             displayInfoStringBuilder.AppendLine($"最高 HDR 亮度（全屏）：{colorInfo.MaxAverageFullFrameLuminanceInNits} 尼特");
@@ -335,11 +342,6 @@ namespace MicroWinUI
             displayInfoStringBuilder.AppendLine($"");
             displayInfoStringBuilder.AppendLine($"白点：{colorInfo.WhitePoint}");
             displayInfoTextBlock.Text = displayInfoStringBuilder.ToString();
-        }
-
-        private void DisplayInfo_AdvancedColorInfoChanged(DisplayInformation sender, object args)
-        {
-            UpdateDisplayInfo();
         }
     }
 }
