@@ -14,6 +14,7 @@ using Windows.UI.Core;
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Mile.Xaml.Interop;
+using Windows.Foundation; // for Size
 
 namespace MicroWinUI
 {
@@ -26,6 +27,9 @@ namespace MicroWinUI
         DisplayInformation displayInfo;
         StackPanel mainStackPanel;
         TextBlock displayInfoTextBlock;
+        StackPanel rightPanel; // holds buttons + sdr/hdr vertically
+        Grid horizontalContainer; // Grid with adaptive side + middle spacers
+        StackPanel verticalContainer; // vertical stack of left/right sections
         string sdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\SDRSample.mkv";
         string hdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\HDRSample.mkv";
         MediaPlayerElement sdrDemoPlayer;
@@ -75,43 +79,69 @@ namespace MicroWinUI
             brightnessOverride.SetBrightnessScenario(DisplayBrightnessScenario.DefaultBrightness, DisplayBrightnessOverrideOptions.None);
             displayInfo = DisplayInformation.GetForCurrentView();
             displayInfo.AdvancedColorInfoChanged += DisplayInfo_AdvancedColorInfoChanged;
-            mainStackPanel = new StackPanel();
-            mainStackPanel.Orientation = Orientation.Vertical;
-            mainStackPanel.Spacing = 32;
-            mainStackPanel.HorizontalAlignment = HorizontalAlignment.Center;
-            mainStackPanel.VerticalAlignment = VerticalAlignment.Center;
-            displayInfoTextBlock = new TextBlock();
-            mainStackPanel.Children.Add(displayInfoTextBlock);
-            var buttonsStackPanel = new StackPanel();
-            buttonsStackPanel.Orientation = Orientation.Horizontal;
-            buttonsStackPanel.HorizontalAlignment = HorizontalAlignment.Center;
-            buttonsStackPanel.VerticalAlignment = VerticalAlignment.Center;
-            var openHdrSettingsButton = new Button();
-            openHdrSettingsButton.Content = "HDR 设置";
-            openHdrSettingsButton.CornerRadius = new CornerRadius(4);
+
+            mainStackPanel = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 32,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            displayInfoTextBlock = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                MaxWidth = 480
+            };
+
+            rightPanel = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 16,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+
+            var buttonsStackPanel = new StackPanel
+            {
+                Orientation = Orientation.Horizontal,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            var openHdrSettingsButton = new Button
+            {
+                Content = "HDR 设置",
+                CornerRadius = new CornerRadius(4),
+                Margin = new Thickness(0, 0, 16, 0)
+            };
             openHdrSettingsButton.Click += OpenHdrSettingsButton_Click;
-            openHdrSettingsButton.Margin = new Thickness(0, 0, 16, 0);
-            buttonsStackPanel.Children.Add(openHdrSettingsButton);
-            var restartButton = new Button();
-            restartButton.Content = "重启程序";
-            restartButton.CornerRadius = new CornerRadius(4);
+            var restartButton = new Button
+            {
+                Content = "重启程序",
+                CornerRadius = new CornerRadius(4)
+            };
             restartButton.Click += RestartButton_Click;
+            buttonsStackPanel.Children.Add(openHdrSettingsButton);
             buttonsStackPanel.Children.Add(restartButton);
-            mainStackPanel.Children.Add(buttonsStackPanel);
+            rightPanel.Children.Add(buttonsStackPanel);
+
             if (File.Exists(sdrDemoPath) && File.Exists(hdrDemoPath))
             {
-                var sdrHdrStackPanel = new StackPanel();
+                var sdrHdrStackPanel = new StackPanel
+                {
+                    Orientation = Orientation.Horizontal,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
                 restartButton.CornerRadius = new CornerRadius(4);
                 restartButton.BorderThickness = new Thickness(2);
-                sdrHdrStackPanel.Orientation = Orientation.Horizontal;
-                sdrHdrStackPanel.HorizontalAlignment = HorizontalAlignment.Center;
-                sdrHdrStackPanel.VerticalAlignment = VerticalAlignment.Center;
-                var sdrStackPanel = new StackPanel();
-                sdrStackPanel.Orientation = Orientation.Vertical;
-                sdrDemoPlayer = new MediaPlayerElement();
-                sdrDemoPlayer.AutoPlay = true;
-                sdrDemoPlayer.AreTransportControlsEnabled = false;
-                sdrDemoPlayer.Source = MediaSource.CreateFromUri(new Uri(sdrDemoPath));
+                var sdrStackPanel = new StackPanel { Orientation = Orientation.Vertical };
+                sdrDemoPlayer = new MediaPlayerElement
+                {
+                    AutoPlay = true,
+                    AreTransportControlsEnabled = false,
+                    Source = MediaSource.CreateFromUri(new Uri(sdrDemoPath))
+                };
                 sdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
                 sdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
                 sdrDemoPlayer.MediaPlayer.IsMuted = true;
@@ -119,39 +149,138 @@ namespace MicroWinUI
                 sdrDemoPlayer.Height = 90;
                 sdrDemoPlayer.Margin = new Thickness(0, 0, 16, 0);
                 sdrStackPanel.Children.Add(sdrDemoPlayer);
-                var sdrTextBlock = new TextBlock();
-                sdrTextBlock.Text = "SDR";
-                sdrTextBlock.FontSize = 9;
-                sdrTextBlock.HorizontalAlignment = HorizontalAlignment.Center;
-                sdrTextBlock.VerticalAlignment = VerticalAlignment.Center;
-                sdrStackPanel.Children.Add(sdrTextBlock);
+                sdrStackPanel.Children.Add(new TextBlock
+                {
+                    Text = "SDR",
+                    FontSize = 9,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                });
                 sdrHdrStackPanel.Children.Add(sdrStackPanel);
-                var hdrStackPanel = new StackPanel();
-                hdrStackPanel.Orientation = Orientation.Vertical;
-                hdrDemoPlayer = new MediaPlayerElement();
-                hdrDemoPlayer.AutoPlay = true;
-                hdrDemoPlayer.AreTransportControlsEnabled = false;
-                hdrDemoPlayer.Source = MediaSource.CreateFromUri(new Uri(hdrDemoPath));
+
+                var hdrStackPanel = new StackPanel { Orientation = Orientation.Vertical };
+                hdrDemoPlayer = new MediaPlayerElement
+                {
+                    AutoPlay = true,
+                    AreTransportControlsEnabled = false,
+                    Source = MediaSource.CreateFromUri(new Uri(hdrDemoPath))
+                };
                 hdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
                 hdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
                 hdrDemoPlayer.MediaPlayer.IsMuted = true;
                 hdrDemoPlayer.Width = 160;
                 hdrDemoPlayer.Height = 90;
                 hdrStackPanel.Children.Add(hdrDemoPlayer);
-                var hdrTextBlock = new TextBlock();
-                hdrTextBlock.Text = "HDR";
-                hdrTextBlock.FontSize = 9;
-                hdrTextBlock.HorizontalAlignment = HorizontalAlignment.Center;
-                hdrTextBlock.VerticalAlignment = VerticalAlignment.Center;
-                hdrStackPanel.Children.Add(hdrTextBlock);
+                hdrStackPanel.Children.Add(new TextBlock
+                {
+                    Text = "HDR",
+                    FontSize = 9,
+                    HorizontalAlignment = HorizontalAlignment.Center,
+                    VerticalAlignment = VerticalAlignment.Center
+                });
                 sdrHdrStackPanel.Children.Add(hdrStackPanel);
-                mainStackPanel.Children.Add(sdrHdrStackPanel);
+                rightPanel.Children.Add(sdrHdrStackPanel);
             }
+
+            verticalContainer = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 32,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            verticalContainer.Children.Add(displayInfoTextBlock);
+            verticalContainer.Children.Add(rightPanel);
+
+            horizontalContainer = new Grid
+            {
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            // Five columns: left spacer, left content, middle spacer, right content, right spacer
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // left adaptive spacer
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // display info
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // middle adaptive spacer
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); // right panel
+            horizontalContainer.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) }); // right adaptive spacer
+            Grid.SetColumn(displayInfoTextBlock, 1);
+            Grid.SetColumn(rightPanel, 3);
+
+            mainStackPanel.Children.Add(verticalContainer); // start vertical
+
             Content = mainStackPanel;
             InvalidateArrange();
             coreWindowHost.Backdrop = IslandWindow.SystemBackdrop.Tabbed;
             UpdateDisplayInfo();
             mainStackPanel.Loaded += MainStackPanel_Loaded;
+            this.SizeChanged += CodePage_SizeChanged;
+            UpdateResponsiveLayout();
+        }
+
+        private void SwitchToHorizontal()
+        {
+            if (mainStackPanel.Children.Count == 0 || mainStackPanel.Children[0] != horizontalContainer)
+            {
+                verticalContainer.Children.Remove(displayInfoTextBlock);
+                verticalContainer.Children.Remove(rightPanel);
+                horizontalContainer.Children.Clear();
+                // re-add with proper column indexes
+                Grid.SetColumn(displayInfoTextBlock, 1);
+                Grid.SetColumn(rightPanel, 3);
+                horizontalContainer.Children.Add(displayInfoTextBlock);
+                horizontalContainer.Children.Add(rightPanel);
+                mainStackPanel.Children.Clear();
+                mainStackPanel.HorizontalAlignment = HorizontalAlignment.Stretch;
+                mainStackPanel.Children.Add(horizontalContainer);
+            }
+        }
+
+        private void SwitchToVertical()
+        {
+            if (mainStackPanel.Children.Count == 0 || mainStackPanel.Children[0] != verticalContainer)
+            {
+                horizontalContainer.Children.Clear();
+                verticalContainer.Children.Clear();
+                verticalContainer.Children.Add(displayInfoTextBlock);
+                verticalContainer.Children.Add(rightPanel);
+                mainStackPanel.Children.Clear();
+                mainStackPanel.HorizontalAlignment = HorizontalAlignment.Center;
+                mainStackPanel.Children.Add(verticalContainer);
+            }
+        }
+
+        private void CodePage_SizeChanged(object sender, SizeChangedEventArgs e)
+        {
+            UpdateResponsiveLayout(e.NewSize.Width);
+        }
+
+        private void UpdateResponsiveLayout(double availableWidth = -1)
+        {
+            try
+            {
+                if (availableWidth <= 0)
+                {
+                    availableWidth = coreWindow.Bounds.Width;
+                }
+
+                var infinite = new Size(double.PositiveInfinity, double.PositiveInfinity);
+                displayInfoTextBlock.Measure(infinite);
+                rightPanel.Measure(infinite);
+                double requiredWidth = displayInfoTextBlock.DesiredSize.Width + rightPanel.DesiredSize.Width + 32; // base padding
+                bool shouldBeHorizontal = requiredWidth <= availableWidth;
+                if (shouldBeHorizontal)
+                {
+                    SwitchToHorizontal();
+                }
+                else
+                {
+                    SwitchToVertical();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"UpdateResponsiveLayout failed: {ex}");
+            }
         }
 
         private void DisplayInfo_AdvancedColorInfoChanged(DisplayInformation sender, object args)
@@ -279,6 +408,9 @@ namespace MicroWinUI
                     });
                 };
             }
+
+            // ensure layout evaluates once content is loaded
+            UpdateResponsiveLayout();
         }
 
         private void RestartButton_Click(object sender, RoutedEventArgs e)
