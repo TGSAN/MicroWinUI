@@ -154,6 +154,35 @@ namespace MicroWinUI
             mainStackPanel.Loaded += MainStackPanel_Loaded;
         }
 
+        private async Task<DisplayMonitor> GetCurrentDisplayMonitorForCoreWindow()
+        {
+            try
+            {
+                var hwnd = coreWindowHost.coreWindowHWND;
+                string interfaceId = Win32API.TryGetMonitorInterfaceIdFromWindow(hwnd);
+                if (!string.IsNullOrEmpty(interfaceId))
+                {
+                    try
+                    {
+                        return await DisplayMonitor.FromInterfaceIdAsync(interfaceId);
+                    }
+                    catch (Exception ex)
+                    {
+                        Debug.WriteLine($"DisplayMonitor resolve failed: {ex.Message}");
+                    }
+                }
+                else
+                {
+                    Debug.WriteLine("Could not resolve interface id for CoreWindow monitor.");
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"Error resolving CoreWindow monitor: {ex}");
+            }
+            return null;
+        }
+
         private async Task LoadMonitorsAsync()
         {
             try
@@ -172,7 +201,6 @@ namespace MicroWinUI
                     try
                     {
                         DisplayMonitor monitor = null;
-                        // Prefer FromInterfaceIdAsync when available; the Id returned by this selector is typically a device interface id
                         if (ApiInformation.IsMethodPresent("Windows.Devices.Display.DisplayMonitor", "FromInterfaceIdAsync"))
                         {
                             monitor = await DisplayMonitor.FromInterfaceIdAsync(di.Id);
@@ -186,7 +214,6 @@ namespace MicroWinUI
                         {
                             monitors.Add(monitor);
                             Debug.WriteLine($"Display device: {di.Name} | Kind: {di.Kind} | Id: {di.Id} -> DisplayMonitor obtained: {monitor.DisplayName} ({monitor.ConnectionKind}, {monitor.UsageKind})");
-                            Debug.WriteLine($"Dolby Vision: {monitor.IsDolbyVisionSupportedInHdrMode}");
                             Debug.WriteLine($"Dolby Vision: {monitor.IsDolbyVisionSupportedInHdrMode}");
                         }
                         else
@@ -204,7 +231,6 @@ namespace MicroWinUI
                     }
                 }
 
-                // dump properties of first device for diagnostics
                 try
                 {
                     foreach (var key in devices[0].Properties.Keys)
@@ -228,8 +254,7 @@ namespace MicroWinUI
 
         private async void MainStackPanel_Loaded(object sender, RoutedEventArgs e)
         {
-            // Ensure monitors are resolved asynchronously on UI thread
-            await LoadMonitorsAsync();
+            //await LoadMonitorsAsync();
 
             if (sdrDemoPlayer != null && hdrDemoPlayer != null)
             {
