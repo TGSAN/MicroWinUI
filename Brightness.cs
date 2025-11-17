@@ -62,7 +62,7 @@ namespace MicroWinUI
             catch { }
         }
 
-        public static double TryGetCurrentBrightnessLevel()
+        public static float TryGetCurrentBrightnessLevel()
         {
             try
             {
@@ -77,7 +77,7 @@ namespace MicroWinUI
                         var val = mo["CurrentBrightness"];
                         if (val != null)
                         {
-                            var level = Convert.ToByte(val) * 0.01;
+                            var level = Convert.ToByte(val) * 0.01f;
                             return level;
                         }
                     }
@@ -87,7 +87,7 @@ namespace MicroWinUI
             {
                 Debug.WriteLine($"WMI brightness query failed: {ex.Message}");
             }
-            return 0.5;
+            return 0.5f;
         }
     }
 }

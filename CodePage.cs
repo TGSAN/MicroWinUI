@@ -38,14 +38,18 @@ namespace MicroWinUI
         Grid horizontalContainer; // Grid with adaptive spacers
         StackPanel verticalContainer; // vertical stack of left/right sections
         Slider sdrBoostSlider;
-        string sdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\SDRSample.mkv";
-        string hdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\HDRSample.mkv";
+        bool sdrBoostSliderDraging = false;
+        CheckBox laptopPreciseKeepHDRBrightnessModeCheckbox;
+        CheckBox laptopKeepHDRBrightnessModeCheckbox;
+        string sdrDemoPath = Environment.GetFolderPath(Environment.SpecialFolder.Windows) + @"\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\SDRSample.mkv";
+        string hdrDemoPath = Environment.GetFolderPath(Environment.SpecialFolder.Windows) + @"\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\HDRSample.mkv";
         MediaPlayerElement sdrDemoPlayer;
         MediaPlayerElement hdrDemoPlayer;
         List<DisplayMonitor> monitors = new List<DisplayMonitor>();
         UISettings uiSettings; // 监听系统颜色/主题变化
 
-        private readonly ConcurrentDictionary<string, ConcurrentDictionary<double, double>> BrightnessNitsCache = new();
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<float, float>> BrightnessNitsCache = new();
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<float, float>> HDRBrightnessLevelCache = new();
         private WmiBrightnessWatcher wmiBrightnessWatcher; // WMI brightness watcher for current monitor
 
         public CodePage(IslandWindow coreWindowHost)
@@ -192,11 +196,21 @@ namespace MicroWinUI
                 Maximum = 100,
                 Value = 0,
                 StepFrequency = 1,
+                ManipulationMode = Windows.UI.Xaml.Input.ManipulationModes.TranslateRailsX,
                 Margin = new Thickness(0, 8, 0, 0),
                 HorizontalAlignment = HorizontalAlignment.Stretch,
                 VerticalAlignment = VerticalAlignment.Center
             };
             sdrBoostSlider.ValueChanged += SdrBoostSlider_ValueChanged;
+            sdrBoostSlider.ManipulationStarted += (s, e) =>
+            {
+                sdrBoostSliderDraging = true;
+            };
+            sdrBoostSlider.ManipulationCompleted += (s, e) =>
+            {
+                sdrBoostSliderDraging = false;
+                UpdateDisplayInfo();
+            };
             sdrBoostSliderPanel.Children.Add(sdrBoostSlider);
 
             rightPanel.Children.Add(sdrBoostSliderPanel);
@@ -258,6 +272,15 @@ namespace MicroWinUI
                 });
                 sdrHdrStackPanel.Children.Add(hdrStackPanel);
                 rightPanel.Children.Add(sdrHdrStackPanel);
+
+                laptopKeepHDRBrightnessModeCheckbox = new CheckBox
+                {
+                    Content = "HDR 亮度保持模式",
+                    Margin = new Thickness(0, 16, 0, 0),
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Center,
+                };
+                rightPanel.Children.Add(laptopKeepHDRBrightnessModeCheckbox);
             }
 
             verticalContainer = new StackPanel
@@ -306,15 +329,44 @@ namespace MicroWinUI
             InitializeWmiBrightnessWatcher();
         }
 
+        private void HDRBrightnessSyncBySystemBrightness(float nits)
+        {
+            if (laptopKeepHDRBrightnessModeCheckbox != null && laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value)
+            {
+                var hwnd = coreWindowHost?.coreWindowHWND ?? IntPtr.Zero;
+                if (hwnd != IntPtr.Zero)
+                {
+                    Debug.WriteLine($"Set SdrWhiteLevel {nits} Nits");
+                    SdrWhiteLevel.TrySetForWindow(hwnd, nits);
+                }
+            }
+        }
+
+        private void SystemBrightnessSyncByHDRBrightness(float nits)
+        {
+            if (laptopKeepHDRBrightnessModeCheckbox != null && laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value)
+            {
+                var level = TryGetLevelFromHDRBrightnessNits(nits);
+                Brightness.TryPersistBrightness(level);
+            }
+        }
+
         private void SdrBoostSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
-            var nits = (sdrBoostSlider.Value * 4) + 80; // 0-100 映射到 80-480 Nits
+            var nits = (((float)sdrBoostSlider.Value) * 4.0f) + 80; // 0-100 映射到 80-480 Nits
             Debug.WriteLine($"Set {nits} Nits");
-            // Apply to the monitor that hosts this CoreWindow
-            var hwnd = coreWindowHost?.coreWindowHWND ?? IntPtr.Zero;
-            if (hwnd != IntPtr.Zero)
+            if (laptopKeepHDRBrightnessModeCheckbox != null && laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value)
             {
-                _ = SdrWhiteLevel.TrySetForWindow(hwnd, nits);
+                SystemBrightnessSyncByHDRBrightness(nits);
+            }
+            else
+            {
+                // Apply to the monitor that hosts this CoreWindow
+                var hwnd = coreWindowHost?.coreWindowHWND ?? IntPtr.Zero;
+                if (hwnd != IntPtr.Zero)
+                {
+                    _ = SdrWhiteLevel.TrySetForWindow(hwnd, nits);
+                }
             }
         }
 
@@ -337,7 +389,7 @@ namespace MicroWinUI
                     wmiBrightnessWatcher.BrightnessChanged += (s, b) =>
                     {
                         Debug.WriteLine($"WMI BrightnessChanged: {b}% for {wmiInstance}");
-                        var brightnessLevel = b * 0.001;
+                        var brightnessLevel = b * 0.001f;
                         var nits = TryGetNitsFromBrightnessLevel(brightnessLevel);
                         Debug.WriteLine($"{brightnessLevel}, {nits} Nits");
                         //BrightnessPersistence.TryPersistBrightness(brightnessLevel);
@@ -362,7 +414,16 @@ namespace MicroWinUI
             new Thread(() =>
             {
                 _ = BuildBrightnessMappingAsync();
+                _ = BuildHDRBrightnessMappingAsync();
             }).Start();
+            GetLaptopPreciseKeepHDRBrightnessLevel().ContinueWith(task =>
+            {
+                var result = task.Result;
+                foreach (var item in result)
+                {
+                    Debug.WriteLine($"Laptop Precise Keep HDR Brightness Level: {item * 100}");
+                }
+            });
         }
 
         private void UiSettings_ColorValuesChanged(UISettings sender, object args)
@@ -605,7 +666,7 @@ namespace MicroWinUI
                         var currentDisplayMonitor = await GetCurrentDisplayMonitorForCoreWindow();
                         var capabilities = displayEnhancementOverride.GetCurrentDisplayEnhancementOverrideCapabilities();
                         var brightnessLevel = Brightness.TryGetCurrentBrightnessLevel();
-                        var nits = TryGetNitsFromBrightnessLevel(brightnessLevel);
+                        var brightnessNits = TryGetNitsFromBrightnessLevel(brightnessLevel);
                         var colorInfo = displayInfo.GetAdvancedColorInfo();
                         var advancedColor = colorInfo.CurrentAdvancedColorKind;
                         var advancedColorStr = "SDR";
@@ -692,7 +753,7 @@ namespace MicroWinUI
                             }
                             var sdrBrightness = (brightnessLevel * 100.0).ToString("F0");
                             var sdrValue = capabilities.IsBrightnessNitsControlSupported
-                                ? $"{sdrBrightness}% ({nits} 尼特)"
+                                ? $"{sdrBrightness}% ({brightnessNits} 尼特)"
                                 : $"{sdrBrightness}%";
                             addRow("系统 SDR 亮度", sdrValue);
                         }
@@ -719,7 +780,13 @@ namespace MicroWinUI
 
                         addRow("白点", colorInfo.WhitePoint.ToString());
 
-                        sdrBoostSlider.Value = ((colorInfo.SdrWhiteLevelInNits - 80) / 4); // 80-480 Nits 映射到 0-100 滑块
+                        if (!sdrBoostSliderDraging) {
+                            sdrBoostSlider.Value = ((colorInfo.SdrWhiteLevelInNits - 80) / 4); // 80-480 Nits 映射到 0-100 滑块
+                        }
+                        if (capabilities.IsBrightnessNitsControlSupported)
+                        {
+                            HDRBrightnessSyncBySystemBrightness(brightnessNits);
+                        }
                     });
         }
 
@@ -732,14 +799,14 @@ namespace MicroWinUI
 
             var hwnd = coreWindowHost.coreWindowHWND;
             string interfaceId = Win32API.TryGetMonitorInterfaceIdFromWindow(hwnd);
-            if (string.IsNullOrEmpty(interfaceId)) 
+            if (string.IsNullOrEmpty(interfaceId))
             {
                 interfaceId = "default";
             }
 
             Parallel.For(0, 101, options, i =>
             {
-                var level = i * 0.01;
+                var level = i * 0.01f;
                 try
                 {
                     if (!BrightnessNitsCache.ContainsKey(interfaceId))
@@ -761,7 +828,76 @@ namespace MicroWinUI
             });
         }
 
-        public double TryGetNitsFromBrightnessLevel(double brightnessLevel)
+        private async Task BuildHDRBrightnessMappingAsync()
+        {
+            var options = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount)
+            };
+
+            var hwnd = coreWindowHost.coreWindowHWND;
+            string interfaceId = Win32API.TryGetMonitorInterfaceIdFromWindow(hwnd);
+            if (string.IsNullOrEmpty(interfaceId))
+            {
+                interfaceId = "default";
+            }
+
+            Parallel.For(0, 101, options, i =>
+            {
+                var nits = (i * 4.0f) + 80.0f; // 80-480 Nits
+                try
+                {
+                    if (!HDRBrightnessLevelCache.ContainsKey(interfaceId))
+                    {
+                        HDRBrightnessLevelCache[interfaceId] = new();
+                    }
+                    var dict = HDRBrightnessLevelCache[interfaceId];
+                    if (!dict.ContainsKey(nits))
+                    {
+                        var settings = BrightnessOverrideSettings.CreateFromNits(nits);
+                        dict[nits] = (float)settings.DesiredLevel;
+                        Debug.WriteLine($"HDR Brightness Nits: {nits}, Level: {(float)settings.DesiredLevel * 100}%");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"HDR Brightness mapping failed at Nits: {nits}: {ex.Message}");
+                }
+            });
+        }
+
+        private async Task<double[]> GetLaptopPreciseKeepHDRBrightnessLevel()
+        {
+            var hwnd = coreWindowHost.coreWindowHWND;
+            string interfaceId = Win32API.TryGetMonitorInterfaceIdFromWindow(hwnd);
+            if (string.IsNullOrEmpty(interfaceId))
+            {
+                interfaceId = "default";
+            }
+            if (!BrightnessNitsCache.ContainsKey(interfaceId))
+            {
+                await BuildBrightnessMappingAsync();
+            }
+            var result = new List<double>();
+            if (BrightnessNitsCache.TryGetValue(interfaceId, out var dict))
+            {
+                foreach (var pair in dict)
+                {
+                    var nits = pair.Value;
+                    if (nits >= 80 && nits <= 480)
+                    {
+                        if (nits % 4 == 0)
+                        {
+                            result.Add(pair.Key);
+                        }
+                    }
+                }
+            }
+            result.Sort();
+            return result.ToArray();
+        }
+
+        private float TryGetNitsFromBrightnessLevel(float brightnessLevel)
         {
             var hwnd = coreWindowHost.coreWindowHWND;
             string interfaceId = Win32API.TryGetMonitorInterfaceIdFromWindow(hwnd);
@@ -771,7 +907,7 @@ namespace MicroWinUI
             }
             if (brightnessLevel < 0) brightnessLevel = 0;
             if (brightnessLevel > 1) brightnessLevel = 1;
-            if (BrightnessNitsCache.TryGetValue(interfaceId, out var dict) 
+            if (BrightnessNitsCache.TryGetValue(interfaceId, out var dict)
                 && dict.TryGetValue(brightnessLevel, out var nits))
             {
                 return nits;
@@ -780,6 +916,28 @@ namespace MicroWinUI
             {
                 var currentBrightnessSettings = BrightnessOverrideSettings.CreateFromLevel(brightnessLevel);
                 return currentBrightnessSettings.DesiredNits;
+            }
+        }
+
+        private float TryGetLevelFromHDRBrightnessNits(float brightnessNits)
+        {
+            var hwnd = coreWindowHost.coreWindowHWND;
+            string interfaceId = Win32API.TryGetMonitorInterfaceIdFromWindow(hwnd);
+            if (string.IsNullOrEmpty(interfaceId))
+            {
+                interfaceId = "default";
+            }
+            if (brightnessNits < 80) brightnessNits = 80;
+            if (brightnessNits > 480) brightnessNits = 480;
+            if (HDRBrightnessLevelCache.TryGetValue(interfaceId, out var dict)
+                && dict.TryGetValue(brightnessNits, out var level))
+            {
+                return level;
+            }
+            else
+            {
+                var currentBrightnessSettings = BrightnessOverrideSettings.CreateFromNits(brightnessNits);
+                return (float)currentBrightnessSettings.DesiredLevel;
             }
         }
     }
