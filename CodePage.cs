@@ -148,13 +148,15 @@ namespace MicroWinUI
             {
                 Content = "HDR 设置",
                 CornerRadius = new CornerRadius(4),
+                BorderThickness = new Thickness(1),
                 Margin = new Thickness(0, 0, 16, 0)
             };
             openHdrSettingsButton.Click += OpenHdrSettingsButton_Click;
             var restartButton = new Button
             {
                 Content = "重启程序",
-                CornerRadius = new CornerRadius(4)
+                CornerRadius = new CornerRadius(4),
+                BorderThickness = new Thickness(1)
             };
             restartButton.Click += RestartButton_Click;
             buttonsStackPanel.Children.Add(openHdrSettingsButton);
@@ -169,7 +171,6 @@ namespace MicroWinUI
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 };
-                restartButton.BorderThickness = new Thickness(2);
                 var sdrStackPanel = new StackPanel { Orientation = Orientation.Vertical };
                 sdrDemoPlayer = new MediaPlayerElement
                 {
