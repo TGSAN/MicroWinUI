@@ -18,6 +18,7 @@ using Windows.Foundation; // for Size
 using Windows.UI.Xaml.Media; // for Brush
 using Windows.UI; // for Color fallback
 using Windows.UI.ViewManagement; // for UISettings
+using System.Collections.Concurrent; // for ConcurrentDictionary
 
 namespace MicroWinUI
 {
@@ -44,6 +45,8 @@ namespace MicroWinUI
         List<DisplayMonitor> monitors = new List<DisplayMonitor>();
         UISettings uiSettings; // 监听系统颜色/主题变化
 
+        private readonly ConcurrentDictionary<string, ConcurrentDictionary<double, double>> BrightnessNitsCache = new();
+
         public CodePage(IslandWindow coreWindowHost)
         {
             this.coreWindowHost = coreWindowHost;
@@ -51,6 +54,9 @@ namespace MicroWinUI
 
             uiSettings = new UISettings();
             uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged; // 系统主题或强调色变化时触发
+
+            // 并行预热亮度百分比到尼特值的映射缓存
+            _ = BuildBrightnessMappingAsync();
 
             //new Task(async () =>
             //{
@@ -69,15 +75,11 @@ namespace MicroWinUI
             brightnessOverride = BrightnessOverride.GetForCurrentView();
             brightnessOverride.IsOverrideActiveChanged += (s, e) =>
             {
-                var brightnessSettings = BrightnessOverrideSettings.CreateFromLevel(s.BrightnessLevel);
+                var nits = TryGetNitsFromBrightnessLevel(s.BrightnessLevel);
                 Debug.WriteLine($"IsOverrideActiveChanged: {s.IsOverrideActive}");
-                Debug.WriteLine($"BrightnessLevelChanged: {s.BrightnessLevel}, {brightnessSettings.DesiredNits} Nits");
+                Debug.WriteLine($"BrightnessLevelChanged: {s.BrightnessLevel}, {nits} Nits");
                 //BrightnessPersistence.TryPersistBrightness(s.BrightnessLevel);
-                _ = this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
-                    () =>
-                    {
-                        UpdateDisplayInfo();
-                    });
+                UpdateDisplayInfo();
             };
             brightnessOverride.StartOverride();
             displayEnhancementOverride = DisplayEnhancementOverride.GetForCurrentView();
@@ -535,6 +537,11 @@ namespace MicroWinUI
             Process.Start("ms-windows-store://pdp?productId=9N7F2SM5D1LR&mode=mini");
         }
 
+        public double GetValueAtRatio(double start, double end, double ratio)
+        {
+            return start + (end - start) * ratio;
+        }
+
         private async void MainStackPanel_Loaded(object sender, RoutedEventArgs e)
         {
             if (sdrDemoPlayer != null && hdrDemoPlayer != null)
@@ -565,121 +572,185 @@ namespace MicroWinUI
 
         private async void UpdateDisplayInfo()
         {
-            var currentDisplayMonitor = await GetCurrentDisplayMonitorForCoreWindow();
-            var capabilities = displayEnhancementOverride.GetCurrentDisplayEnhancementOverrideCapabilities();
-            var currentBrightnessSettings = BrightnessOverrideSettings.CreateFromLevel(brightnessOverride.BrightnessLevel);
-            var colorInfo = displayInfo.GetAdvancedColorInfo();
-            var advancedColor = colorInfo.CurrentAdvancedColorKind;
-            var advancedColorStr = "SDR";
-            switch (advancedColor)
+            await this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
+                    async () =>
+                    {
+                        var currentDisplayMonitor = await GetCurrentDisplayMonitorForCoreWindow();
+                        var capabilities = displayEnhancementOverride.GetCurrentDisplayEnhancementOverrideCapabilities();
+                        var nits = TryGetNitsFromBrightnessLevel(brightnessOverride.BrightnessLevel);
+                        var colorInfo = displayInfo.GetAdvancedColorInfo();
+                        var advancedColor = colorInfo.CurrentAdvancedColorKind;
+                        var advancedColorStr = "SDR";
+                        switch (advancedColor)
+                        {
+                            case AdvancedColorKind.StandardDynamicRange:
+                                advancedColorStr = "Standard Dynamic Range";
+                                break;
+                            case AdvancedColorKind.WideColorGamut:
+                                advancedColorStr = "Wide Color Gamut";
+                                break;
+                            case AdvancedColorKind.HighDynamicRange:
+                                advancedColorStr = "High Dynamic Range";
+                                break;
+                            default:
+                                advancedColorStr = advancedColor.ToString();
+                                break;
+                        }
+                        var nitsRanges = capabilities.GetSupportedNitRanges();
+
+                        // 重建表格
+                        displayInfoTable.Children.Clear();
+                        displayInfoTable.RowDefinitions.Clear();
+
+                        Action addSeparator = () =>
+                        {
+                            var rowIndexSep = displayInfoTable.RowDefinitions.Count;
+                            displayInfoTable.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                            var separator = new Border
+                            {
+                                Height = 1,
+                                Margin = new Thickness(0, 4, 0, 4),
+                                Background = new SolidColorBrush(Color.FromArgb(0x20, 0x00, 0x00, 0x00)),
+                                HorizontalAlignment = HorizontalAlignment.Stretch
+                            };
+                            Grid.SetRow(separator, rowIndexSep);
+                            Grid.SetColumn(separator, 0);
+                            Grid.SetColumnSpan(separator, 4);
+                            displayInfoTable.Children.Add(separator);
+                        };
+
+                        Action<string, string> addRow = (key, value) =>
+                        {
+                            var rowIndex = displayInfoTable.RowDefinitions.Count;
+                            displayInfoTable.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                            var keyBlock = new TextBlock
+                            {
+                                Text = key,
+                                FontSize = 14,
+                                Margin = new Thickness(0, 4, 12, 4),
+                                TextWrapping = TextWrapping.NoWrap,
+                                HorizontalAlignment = HorizontalAlignment.Left,
+                                VerticalAlignment = VerticalAlignment.Center
+                            };
+                            var valueBlock = new TextBlock
+                            {
+                                Text = value,
+                                FontSize = 14,
+                                Opacity = 0.75,
+                                Margin = new Thickness(12, 4, 0, 4),
+                                TextWrapping = TextWrapping.Wrap,
+                                HorizontalAlignment = HorizontalAlignment.Stretch,
+                                VerticalAlignment = VerticalAlignment.Center
+                            };
+
+                            Grid.SetRow(keyBlock, rowIndex);
+                            Grid.SetColumn(keyBlock, 1);
+                            Grid.SetRow(valueBlock, rowIndex);
+                            Grid.SetColumn(valueBlock, 2);
+                            displayInfoTable.Children.Add(keyBlock);
+                            displayInfoTable.Children.Add(valueBlock);
+                        };
+
+                        addRow("系统亮度调节", capabilities.IsBrightnessControlSupported ? "支持" : "不支持");
+                        if (capabilities.IsBrightnessControlSupported)
+                        {
+                            addRow("精确式系统亮度调节", capabilities.IsBrightnessNitsControlSupported ? "支持" : "不支持");
+                            if (nitsRanges.Count > 0)
+                            {
+                                addRow("精确式系统亮度调节精度", $"{nitsRanges[0].StepSizeNits} 尼特");
+                                addRow("精确式系统亮度调节最高亮度", $"{nitsRanges[0].MaxNits} 尼特");
+                                addRow("精确式系统亮度调节最低亮度", $"{nitsRanges[0].MinNits} 尼特");
+                            }
+                            var sdrBrightness = (brightnessOverride.BrightnessLevel * 100.0).ToString("F0");
+                            var sdrValue = capabilities.IsBrightnessNitsControlSupported
+                                ? $"{sdrBrightness}% ({nits} 尼特)"
+                                : $"{sdrBrightness}%";
+                            addRow("系统 SDR 亮度", sdrValue);
+                        }
+                        addSeparator();
+
+                        addRow("HDR10", colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持");
+                        addRow("HDR10+", colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10Plus) ? "支持" : "不支持");
+                        addRow("Dolby Vision", (currentDisplayMonitor?.IsDolbyVisionSupportedInHdrMode == true) ? "支持" : "不支持");
+                        addSeparator();
+
+                        addRow("最高 HDR 亮度（峰值）", $"{colorInfo.MaxLuminanceInNits} 尼特");
+                        addRow("最高 HDR 亮度（全屏）", $"{colorInfo.MaxAverageFullFrameLuminanceInNits} 尼特");
+                        addRow("最低亮度", $"{colorInfo.MinLuminanceInNits} 尼特");
+                        addRow("SDR 亮度", $"{colorInfo.SdrWhiteLevelInNits} 尼特");
+                        addSeparator();
+
+                        addRow("色彩模式", advancedColorStr);
+                        addSeparator();
+
+                        addRow("红", colorInfo.RedPrimary.ToString());
+                        addRow("绿", colorInfo.GreenPrimary.ToString());
+                        addRow("蓝", colorInfo.BluePrimary.ToString());
+                        addSeparator();
+
+                        addRow("白点", colorInfo.WhitePoint.ToString());
+                    });
+        }
+
+        private async Task BuildBrightnessMappingAsync()
+        {
+            var options = new ParallelOptions
             {
-                case AdvancedColorKind.StandardDynamicRange:
-                    advancedColorStr = "Standard Dynamic Range";
-                    break;
-                case AdvancedColorKind.WideColorGamut:
-                    advancedColorStr = "Wide Color Gamut";
-                    break;
-                case AdvancedColorKind.HighDynamicRange:
-                    advancedColorStr = "High Dynamic Range";
-                    break;
-                default:
-                    advancedColorStr = advancedColor.ToString();
-                    break;
+                MaxDegreeOfParallelism = Math.Max(1, Environment.ProcessorCount)
+            };
+
+            var hwnd = coreWindowHost.coreWindowHWND;
+            string interfaceId = Win32API.TryGetMonitorInterfaceIdFromWindow(hwnd);
+            if (string.IsNullOrEmpty(interfaceId)) 
+            {
+                interfaceId = "default";
             }
-            var nitsRanges = capabilities.GetSupportedNitRanges();
 
-            // 重建表格
-            displayInfoTable.Children.Clear();
-            displayInfoTable.RowDefinitions.Clear();
-
-            Action addSeparator = () =>
+            Parallel.For(0, 101, options, i =>
             {
-                var rowIndexSep = displayInfoTable.RowDefinitions.Count;
-                displayInfoTable.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-                var separator = new Border
+                var level = i * 0.01;
+                try
                 {
-                    Height = 1,
-                    Margin = new Thickness(0, 4, 0, 4),
-                    Background = new SolidColorBrush(Color.FromArgb(0x20, 0x00, 0x00, 0x00)),
-                    HorizontalAlignment = HorizontalAlignment.Stretch
-                };
-                Grid.SetRow(separator, rowIndexSep);
-                Grid.SetColumn(separator, 0);
-                Grid.SetColumnSpan(separator, 4);
-                displayInfoTable.Children.Add(separator);
-            };
-
-            Action<string, string> addRow = (key, value) =>
-            {
-                var rowIndex = displayInfoTable.RowDefinitions.Count;
-                displayInfoTable.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
-
-                var keyBlock = new TextBlock
-                {
-                    Text = key,
-                    FontSize = 14,
-                    Margin = new Thickness(0, 4, 12, 4),
-                    TextWrapping = TextWrapping.NoWrap,
-                    HorizontalAlignment = HorizontalAlignment.Left,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-                var valueBlock = new TextBlock
-                {
-                    Text = value,
-                    FontSize = 14,
-                    Opacity = 0.75,
-                    Margin = new Thickness(12, 4, 0, 4),
-                    TextWrapping = TextWrapping.Wrap,
-                    HorizontalAlignment = HorizontalAlignment.Stretch,
-                    VerticalAlignment = VerticalAlignment.Center
-                };
-
-                Grid.SetRow(keyBlock, rowIndex);
-                Grid.SetColumn(keyBlock, 1);
-                Grid.SetRow(valueBlock, rowIndex);
-                Grid.SetColumn(valueBlock, 2);
-                displayInfoTable.Children.Add(keyBlock);
-                displayInfoTable.Children.Add(valueBlock);
-            };
-
-            addRow("系统亮度调节", capabilities.IsBrightnessControlSupported ? "支持" : "不支持");
-            if (capabilities.IsBrightnessControlSupported)
-            {
-                addRow("精确式系统亮度调节", capabilities.IsBrightnessNitsControlSupported ? "支持" : "不支持");
-                if (nitsRanges.Count > 0)
-                {
-                    addRow("精确式系统亮度调节精度", $"{nitsRanges[0].StepSizeNits} 尼特");
-                    addRow("精确式系统亮度调节最高亮度", $"{nitsRanges[0].MaxNits} 尼特");
-                    addRow("精确式系统亮度调节最低亮度", $"{nitsRanges[0].MinNits} 尼特");
+                    if (!BrightnessNitsCache.ContainsKey(interfaceId))
+                    {
+                        BrightnessNitsCache[interfaceId] = new();
+                    }
+                    var dict = BrightnessNitsCache[interfaceId];
+                    if (!dict.ContainsKey(level))
+                    {
+                        var settings = BrightnessOverrideSettings.CreateFromLevel(level);
+                        dict[level] = settings.DesiredNits;
+                        Debug.WriteLine($"Brightness Level: {i}%, Nits: {settings.DesiredNits}");
+                    }
                 }
-                var sdrBrightness = (currentBrightnessSettings.DesiredLevel * 100.0).ToString("F0");
-                var sdrValue = capabilities.IsBrightnessNitsControlSupported
-                    ? $"{sdrBrightness}% ({currentBrightnessSettings.DesiredNits} 尼特)"
-                    : $"{sdrBrightness}%";
-                addRow("系统 SDR 亮度", sdrValue);
+                catch (Exception ex)
+                {
+                    Debug.WriteLine($"Brightness mapping failed at {i}%: {ex.Message}");
+                }
+            });
+        }
+
+        public double TryGetNitsFromBrightnessLevel(double brightnessLevel)
+        {
+            var hwnd = coreWindowHost.coreWindowHWND;
+            string interfaceId = Win32API.TryGetMonitorInterfaceIdFromWindow(hwnd);
+            if (string.IsNullOrEmpty(interfaceId))
+            {
+                interfaceId = "default";
             }
-            addSeparator();
-
-            addRow("HDR10", colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持");
-            addRow("HDR10+", colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10Plus) ? "支持" : "不支持");
-            addRow("Dolby Vision", (currentDisplayMonitor?.IsDolbyVisionSupportedInHdrMode == true) ? "支持" : "不支持");
-            addSeparator();
-
-            addRow("最高 HDR 亮度（峰值）", $"{colorInfo.MaxLuminanceInNits} 尼特");
-            addRow("最高 HDR 亮度（全屏）", $"{colorInfo.MaxAverageFullFrameLuminanceInNits} 尼特");
-            addRow("最低亮度", $"{colorInfo.MinLuminanceInNits} 尼特");
-            addRow("SDR 亮度", $"{colorInfo.SdrWhiteLevelInNits} 尼特");
-            addSeparator();
-
-            addRow("色彩模式", advancedColorStr);
-            addSeparator();
-
-            addRow("红", colorInfo.RedPrimary.ToString());
-            addRow("绿", colorInfo.GreenPrimary.ToString());
-            addRow("蓝", colorInfo.BluePrimary.ToString());
-            addSeparator();
-
-            addRow("白点", colorInfo.WhitePoint.ToString());
+            if (brightnessLevel < 0) brightnessLevel = 0;
+            if (brightnessLevel > 1) brightnessLevel = 1;
+            if (BrightnessNitsCache.TryGetValue(interfaceId, out var dict) 
+                && dict.TryGetValue(brightnessLevel, out var nits))
+            {
+                return nits;
+            }
+            else
+            {
+                var currentBrightnessSettings = BrightnessOverrideSettings.CreateFromLevel(brightnessOverride.BrightnessLevel);
+                return currentBrightnessSettings.DesiredNits;
+            }
         }
     }
 }
