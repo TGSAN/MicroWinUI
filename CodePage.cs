@@ -30,7 +30,7 @@ namespace MicroWinUI
         DisplayInformation displayInfo;
         ScrollViewer scrollViewer; // scroll container
         StackPanel mainStackPanel;
-        TextBlock displayInfoTextBlock;
+        Grid displayInfoTable;
         Border leftCard;
         Border rightCard;
         StackPanel rightPanel; // holds buttons + sdr/hdr vertically
@@ -101,19 +101,22 @@ namespace MicroWinUI
                 VerticalAlignment = VerticalAlignment.Center // vertical center when content smaller than viewport
             };
 
-            displayInfoTextBlock = new TextBlock
+            displayInfoTable = new Grid
             {
-                FontSize = 13,
-                TextWrapping = TextWrapping.Wrap,
-                HorizontalAlignment = HorizontalAlignment.Stretch,
-                MaxWidth = 240
+                HorizontalAlignment = HorizontalAlignment.Stretch
             };
+            // 4列布局：* | Key | Value | *，内容居中且允许分割线贯穿
+            displayInfoTable.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            displayInfoTable.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            displayInfoTable.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            displayInfoTable.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
 
             leftCard = new Border
             {
-                Child = displayInfoTextBlock,
+                Child = displayInfoTable,
+                HorizontalAlignment = HorizontalAlignment.Stretch,
                 BorderThickness = new Thickness(1),
-                Padding = new Thickness(16),
+                Padding = new Thickness(0, 8, 0, 8),
                 CornerRadius = new CornerRadius(4),
                 Margin = new Thickness(8, 0, 8, 0)
             };
@@ -185,7 +188,7 @@ namespace MicroWinUI
                 {
                     Text = "SDR 内容",
                     FontSize = 12,
-                    Opacity = 0.5,
+                    Opacity = 0.75,
                     Margin = new Thickness(4),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
@@ -209,7 +212,7 @@ namespace MicroWinUI
                 {
                     Text = "HDR 内容",
                     FontSize = 12,
-                    Opacity = 0.5,
+                    Opacity = 0.75,
                     Margin = new Thickness(4),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
@@ -520,38 +523,99 @@ namespace MicroWinUI
                     break;
             }
             var nitsRanges = capabilities.GetSupportedNitRanges();
-            var displayInfoStringBuilder = new StringBuilder();
-            displayInfoStringBuilder.AppendLine($"系统亮度调节：{(capabilities.IsBrightnessControlSupported ? "支持" : "不支持")}");
+
+            // 重建表格
+            displayInfoTable.Children.Clear();
+            displayInfoTable.RowDefinitions.Clear();
+
+            Action addSeparator = () =>
+            {
+                var rowIndexSep = displayInfoTable.RowDefinitions.Count;
+                displayInfoTable.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+                var separator = new Border
+                {
+                    Height = 1,
+                    Margin = new Thickness(0, 4, 0, 4),
+                    Background = new SolidColorBrush(Color.FromArgb(0x20, 0x00, 0x00, 0x00)),
+                    HorizontalAlignment = HorizontalAlignment.Stretch
+                };
+                Grid.SetRow(separator, rowIndexSep);
+                Grid.SetColumn(separator, 0);
+                Grid.SetColumnSpan(separator, 4);
+                displayInfoTable.Children.Add(separator);
+            };
+
+            Action<string, string> addRow = (key, value) =>
+            {
+                var rowIndex = displayInfoTable.RowDefinitions.Count;
+                displayInfoTable.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+
+                var keyBlock = new TextBlock
+                {
+                    Text = key,
+                    FontSize = 14,
+                    Margin = new Thickness(0, 4, 12, 4),
+                    TextWrapping = TextWrapping.NoWrap,
+                    HorizontalAlignment = HorizontalAlignment.Left,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+                var valueBlock = new TextBlock
+                {
+                    Text = value,
+                    FontSize = 14,
+                    Opacity = 0.75,
+                    Margin = new Thickness(12, 4, 0, 4),
+                    TextWrapping = TextWrapping.Wrap,
+                    HorizontalAlignment = HorizontalAlignment.Stretch,
+                    VerticalAlignment = VerticalAlignment.Center
+                };
+
+                Grid.SetRow(keyBlock, rowIndex);
+                Grid.SetColumn(keyBlock, 1);
+                Grid.SetRow(valueBlock, rowIndex);
+                Grid.SetColumn(valueBlock, 2);
+                displayInfoTable.Children.Add(keyBlock);
+                displayInfoTable.Children.Add(valueBlock);
+            };
+
+            addRow("系统亮度调节", capabilities.IsBrightnessControlSupported ? "支持" : "不支持");
             if (capabilities.IsBrightnessControlSupported)
             {
-                displayInfoStringBuilder.AppendLine($"精确式系统亮度调节：{(capabilities.IsBrightnessNitsControlSupported ? "支持" : "不支持")}");
+                addRow("精确式系统亮度调节", capabilities.IsBrightnessNitsControlSupported ? "支持" : "不支持");
                 if (nitsRanges.Count > 0)
                 {
-                    displayInfoStringBuilder.AppendLine($"精确式系统亮度调节精度：{nitsRanges[0].StepSizeNits} 尼特");
-                    displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最高亮度：{nitsRanges[0].MaxNits} 尼特");
-                    displayInfoStringBuilder.AppendLine($"精确式系统亮度调节最低亮度：{nitsRanges[0].MinNits} 尼特");
+                    addRow("精确式系统亮度调节精度", $"{nitsRanges[0].StepSizeNits} 尼特");
+                    addRow("精确式系统亮度调节最高亮度", $"{nitsRanges[0].MaxNits} 尼特");
+                    addRow("精确式系统亮度调节最低亮度", $"{nitsRanges[0].MinNits} 尼特");
                 }
-                displayInfoStringBuilder.AppendLine($"");
-                displayInfoStringBuilder.AppendLine($"系统 SDR 亮度: {currentBrightnessSettings.DesiredLevel * 100}%{(capabilities.IsBrightnessNitsControlSupported ? $" ({currentBrightnessSettings.DesiredNits} 尼特)" : "")}");
+                var sdrBrightness = (currentBrightnessSettings.DesiredLevel * 100.0).ToString("F0");
+                var sdrValue = capabilities.IsBrightnessNitsControlSupported
+                    ? $"{sdrBrightness}% ({currentBrightnessSettings.DesiredNits} 尼特)"
+                    : $"{sdrBrightness}%";
+                addRow("系统 SDR 亮度", sdrValue);
             }
-            displayInfoStringBuilder.AppendLine($"");
-            displayInfoStringBuilder.AppendLine($"HDR10：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持")}");
-            displayInfoStringBuilder.AppendLine($"HDR10+：{(colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10Plus) ? "支持" : "不支持")}");
-            displayInfoStringBuilder.AppendLine($"Dolby Vision：{(currentDisplayMonitor?.IsDolbyVisionSupportedInHdrMode == true ? "支持" : "不支持")}");
-            displayInfoStringBuilder.AppendLine($"");
-            displayInfoStringBuilder.AppendLine($"最高 HDR 亮度（峰值）：{colorInfo.MaxLuminanceInNits} 尼特");
-            displayInfoStringBuilder.AppendLine($"最高 HDR 亮度（全屏）：{colorInfo.MaxAverageFullFrameLuminanceInNits} 尼特");
-            displayInfoStringBuilder.AppendLine($"最低亮度：{colorInfo.MinLuminanceInNits} 尼特");
-            displayInfoStringBuilder.AppendLine($"SDR 亮度：{colorInfo.SdrWhiteLevelInNits} 尼特");
-            displayInfoStringBuilder.AppendLine($"");
-            displayInfoStringBuilder.AppendLine($"色彩模式：{advancedColorStr}");
-            displayInfoStringBuilder.AppendLine($"");
-            displayInfoStringBuilder.AppendLine($"红：{colorInfo.RedPrimary}");
-            displayInfoStringBuilder.AppendLine($"绿：{colorInfo.GreenPrimary}");
-            displayInfoStringBuilder.AppendLine($"蓝：{colorInfo.BluePrimary}");
-            displayInfoStringBuilder.AppendLine($"");
-            displayInfoStringBuilder.AppendLine($"白点：{colorInfo.WhitePoint}");
-            displayInfoTextBlock.Text = displayInfoStringBuilder.ToString().Trim();
+            addSeparator();
+
+            addRow("HDR10", colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持");
+            addRow("HDR10+", colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10Plus) ? "支持" : "不支持");
+            addRow("Dolby Vision", (currentDisplayMonitor?.IsDolbyVisionSupportedInHdrMode == true) ? "支持" : "不支持");
+            addSeparator();
+
+            addRow("最高 HDR 亮度（峰值）", $"{colorInfo.MaxLuminanceInNits} 尼特");
+            addRow("最高 HDR 亮度（全屏）", $"{colorInfo.MaxAverageFullFrameLuminanceInNits} 尼特");
+            addRow("最低亮度", $"{colorInfo.MinLuminanceInNits} 尼特");
+            addRow("SDR 亮度", $"{colorInfo.SdrWhiteLevelInNits} 尼特");
+            addSeparator();
+
+            addRow("色彩模式", advancedColorStr);
+            addSeparator();
+
+            addRow("红", colorInfo.RedPrimary.ToString());
+            addRow("绿", colorInfo.GreenPrimary.ToString());
+            addRow("蓝", colorInfo.BluePrimary.ToString());
+            addSeparator();
+
+            addRow("白点", colorInfo.WhitePoint.ToString());
         }
     }
 }
