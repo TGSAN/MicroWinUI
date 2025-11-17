@@ -36,6 +36,7 @@ namespace MicroWinUI
         StackPanel rightPanel; // holds buttons + sdr/hdr vertically
         Grid horizontalContainer; // Grid with adaptive spacers
         StackPanel verticalContainer; // vertical stack of left/right sections
+        Slider sdrBoostSlider;
         string sdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\SDRSample.mkv";
         string hdrDemoPath = @"C:\Windows\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\HDRSample.mkv";
         MediaPlayerElement sdrDemoPlayer;
@@ -163,6 +164,49 @@ namespace MicroWinUI
             buttonsStackPanel.Children.Add(restartButton);
             rightPanel.Children.Add(buttonsStackPanel);
 
+            var sdrBoostSliderPanel = new StackPanel
+            {
+                Orientation = Orientation.Vertical,
+                Spacing = 4,
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Width = 400
+            };
+
+            var sdrBoostSliderLabel = new TextBlock
+            {
+                Text = "SDR 内容亮度",
+                FontSize = 14,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            sdrBoostSliderPanel.Children.Add(sdrBoostSliderLabel);
+
+            var sdrBoostSliderDesc = new TextBlock
+            {
+                Text = "将此窗口移动到要调整的显示器上，然后拖动滑块，直到 SDR 内容的亮度符合您的需要。",
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Opacity = 0.75,
+                HorizontalAlignment = HorizontalAlignment.Left,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            sdrBoostSliderPanel.Children.Add(sdrBoostSliderDesc);
+
+            sdrBoostSlider = new Slider
+            {
+                Minimum = 0,
+                Maximum = 100,
+                Value = 0,
+                StepFrequency = 1,
+                Margin = new Thickness(0, 8, 0, 0),
+                HorizontalAlignment = HorizontalAlignment.Stretch,
+                VerticalAlignment = VerticalAlignment.Center
+            };
+            sdrBoostSliderPanel.Children.Add(sdrBoostSlider);
+
+            rightPanel.Children.Add(sdrBoostSliderPanel);
+
             if (File.Exists(sdrDemoPath) && File.Exists(hdrDemoPath))
             {
                 var sdrHdrStackPanel = new StackPanel
@@ -181,8 +225,8 @@ namespace MicroWinUI
                 sdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
                 sdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
                 sdrDemoPlayer.MediaPlayer.IsMuted = true;
-                sdrDemoPlayer.Width = 160;
-                sdrDemoPlayer.Height = 90;
+                sdrDemoPlayer.Width = 192;
+                sdrDemoPlayer.Height = 108;
                 sdrDemoPlayer.Margin = new Thickness(0, 0, 16, 0);
                 sdrStackPanel.Children.Add(sdrDemoPlayer);
                 sdrStackPanel.Children.Add(new TextBlock
@@ -206,8 +250,8 @@ namespace MicroWinUI
                 hdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
                 hdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
                 hdrDemoPlayer.MediaPlayer.IsMuted = true;
-                hdrDemoPlayer.Width = 160;
-                hdrDemoPlayer.Height = 90;
+                hdrDemoPlayer.Width = 192;
+                hdrDemoPlayer.Height = 108;
                 hdrStackPanel.Children.Add(hdrDemoPlayer);
                 hdrStackPanel.Children.Add(new TextBlock
                 {
