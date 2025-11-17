@@ -52,19 +52,20 @@ namespace MicroWinUI
             uiSettings = new UISettings();
             uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged; // 系统主题或强调色变化时触发
 
-            new Task(async () =>
-            {
-                while (true)
-                {
-                    _ = coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
-                    () =>
-                    {
-                        var bounds = coreWindow.Bounds;
-                        Debug.WriteLine($"CodePage CoreWindow Bounds: {bounds.Width} x {bounds.Height}, X: {bounds.X}, Y: {bounds.Y}");
-                    });
-                    await Task.Delay(1000);
-                }
-            }).Start();
+            //new Task(async () =>
+            //{
+            //    while (true)
+            //    {
+            //        _ = coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
+            //        () =>
+            //        {
+            //            var bounds = coreWindow.Bounds;
+            //            Debug.WriteLine($"CodePage CoreWindow Bounds: {bounds.Width} x {bounds.Height}, X: {bounds.X}, Y: {bounds.Y}");
+            //        });
+            //        await Task.Delay(1000);
+            //    }
+            //}).Start();
+
             brightnessOverride = BrightnessOverride.GetForCurrentView();
             brightnessOverride.IsOverrideActiveChanged += (s, e) =>
             {
@@ -145,6 +146,7 @@ namespace MicroWinUI
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
             };
+
             var openHdrSettingsButton = new Button
             {
                 Content = "HDR 设置",
@@ -153,6 +155,18 @@ namespace MicroWinUI
                 Margin = new Thickness(0, 0, 16, 0)
             };
             openHdrSettingsButton.Click += OpenHdrSettingsButton_Click;
+            buttonsStackPanel.Children.Add(openHdrSettingsButton);
+
+            var openHdrCalibrationSettingsButton = new Button
+            {
+                Content = "HDR 显示器校准",
+                CornerRadius = new CornerRadius(4),
+                BorderThickness = new Thickness(1),
+                Margin = new Thickness(0, 0, 16, 0)
+            };
+            openHdrCalibrationSettingsButton.Click += OpenHdrCalibrationSettingsButton_Click;
+            buttonsStackPanel.Children.Add(openHdrCalibrationSettingsButton);
+
             var restartButton = new Button
             {
                 Content = "重启程序",
@@ -160,8 +174,8 @@ namespace MicroWinUI
                 BorderThickness = new Thickness(1)
             };
             restartButton.Click += RestartButton_Click;
-            buttonsStackPanel.Children.Add(openHdrSettingsButton);
             buttonsStackPanel.Children.Add(restartButton);
+
             rightPanel.Children.Add(buttonsStackPanel);
 
             var sdrBoostSliderPanel = new StackPanel
@@ -514,6 +528,11 @@ namespace MicroWinUI
         private void OpenHdrSettingsButton_Click(object sender, RoutedEventArgs e)
         {
             Process.Start("ms-settings:display-hdr");
+        }
+
+        private void OpenHdrCalibrationSettingsButton_Click(object sender, RoutedEventArgs e)
+        {
+            Process.Start("ms-windows-store://pdp?productId=9N7F2SM5D1LR&mode=mini");
         }
 
         private async void MainStackPanel_Loaded(object sender, RoutedEventArgs e)
