@@ -37,6 +37,7 @@ namespace MicroWinUI
         StackPanel rightPanel; // holds buttons + sdr/hdr vertically
         Grid horizontalContainer; // Grid with adaptive spacers
         StackPanel verticalContainer; // vertical stack of left/right sections
+        TextBlock sdrBoostSliderLabel;
         Slider sdrBoostSlider;
         bool sdrBoostSliderDraging = false;
         CheckBox laptopPreciseKeepHDRBrightnessModeCheckbox;
@@ -75,12 +76,12 @@ namespace MicroWinUI
             //}).Start();
 
             displayEnhancementOverride = DisplayEnhancementOverride.GetForCurrentView();
-            var colorSettings = ColorOverrideSettings.CreateFromDisplayColorOverrideScenario(DisplayColorOverrideScenario.Accurate);
-            displayEnhancementOverride.ColorOverrideSettings = colorSettings;
-            if (displayEnhancementOverride.CanOverride)
-            {
-                displayEnhancementOverride.RequestOverride();
-            }
+            //var colorSettings = ColorOverrideSettings.CreateFromDisplayColorOverrideScenario(DisplayColorOverrideScenario.Accurate);
+            //displayEnhancementOverride.ColorOverrideSettings = colorSettings;
+            //if (displayEnhancementOverride.CanOverride)
+            //{
+            //    displayEnhancementOverride.RequestOverride();
+            //}
 
             displayInfo = DisplayInformation.GetForCurrentView();
             displayInfo.AdvancedColorInfoChanged += DisplayInfo_AdvancedColorInfoChanged;
@@ -134,6 +135,7 @@ namespace MicroWinUI
 
             var buttonsStackPanel = new StackPanel
             {
+                Margin = new Thickness(0, 0, 0, 16),
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center
@@ -170,7 +172,7 @@ namespace MicroWinUI
                 Width = 400
             };
 
-            var sdrBoostSliderLabel = new TextBlock
+            sdrBoostSliderLabel = new TextBlock
             {
                 Text = "SDR 内容亮度",
                 FontSize = 14,
@@ -242,7 +244,7 @@ namespace MicroWinUI
                     Text = "SDR 内容",
                     FontSize = 12,
                     Opacity = 0.75,
-                    Margin = new Thickness(4),
+                    Margin = new Thickness(0, 4, 0, 0),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 });
@@ -266,7 +268,7 @@ namespace MicroWinUI
                     Text = "HDR 内容",
                     FontSize = 12,
                     Opacity = 0.75,
-                    Margin = new Thickness(4),
+                    Margin = new Thickness(0, 4, 0, 0),
                     HorizontalAlignment = HorizontalAlignment.Center,
                     VerticalAlignment = VerticalAlignment.Center
                 });
@@ -275,10 +277,17 @@ namespace MicroWinUI
 
                 laptopKeepHDRBrightnessModeCheckbox = new CheckBox
                 {
-                    Content = "HDR 亮度保持模式",
-                    Margin = new Thickness(0, 16, 0, 0),
+                    Content = "保持 HDR 亮度准确",
                     HorizontalAlignment = HorizontalAlignment.Left,
                     VerticalAlignment = VerticalAlignment.Center,
+                };
+                laptopKeepHDRBrightnessModeCheckbox.Unchecked += (s, e) =>
+                {
+                    UpdateDisplayInfo();
+                };
+                laptopKeepHDRBrightnessModeCheckbox.Checked += (s, e) =>
+                {
+                    UpdateDisplayInfo();
                 };
                 rightPanel.Children.Add(laptopKeepHDRBrightnessModeCheckbox);
             }
@@ -331,7 +340,7 @@ namespace MicroWinUI
 
         private void HDRBrightnessSyncBySystemBrightness(float nits)
         {
-            if (laptopKeepHDRBrightnessModeCheckbox != null && laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value)
+            if (laptopKeepHDRBrightnessModeCheckbox != null && laptopKeepHDRBrightnessModeCheckbox.IsEnabled && laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value)
             {
                 var hwnd = coreWindowHost?.coreWindowHWND ?? IntPtr.Zero;
                 if (hwnd != IntPtr.Zero)
@@ -344,7 +353,7 @@ namespace MicroWinUI
 
         private void SystemBrightnessSyncByHDRBrightness(float nits)
         {
-            if (laptopKeepHDRBrightnessModeCheckbox != null && laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value)
+            if (laptopKeepHDRBrightnessModeCheckbox != null && laptopKeepHDRBrightnessModeCheckbox.IsEnabled && laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value)
             {
                 var level = TryGetLevelFromHDRBrightnessNits(nits);
                 Brightness.TryPersistBrightness(level);
@@ -419,14 +428,14 @@ namespace MicroWinUI
                 _ = BuildBrightnessMappingAsync();
                 _ = BuildHDRBrightnessMappingAsync();
             }).Start();
-            GetLaptopPreciseKeepHDRBrightnessLevel().ContinueWith(task =>
-            {
-                var result = task.Result;
-                foreach (var item in result)
-                {
-                    Debug.WriteLine($"Laptop Precise Keep HDR Brightness Level: {item * 100}");
-                }
-            });
+            //GetLaptopPreciseKeepHDRBrightnessLevel().ContinueWith(task =>
+            //{
+            //    var result = task.Result;
+            //    foreach (var item in result)
+            //    {
+            //        Debug.WriteLine($"Laptop Precise Keep HDR Brightness Level: {item * 100}");
+            //    }
+            //});
         }
 
         private void UiSettings_ColorValuesChanged(UISettings sender, object args)
@@ -789,7 +798,21 @@ namespace MicroWinUI
                         }
                         if (capabilities.IsBrightnessNitsControlSupported)
                         {
+                            laptopKeepHDRBrightnessModeCheckbox.IsEnabled = true;
                             HDRBrightnessSyncBySystemBrightness(brightnessNits);
+                        }
+                        else 
+                        {
+                            laptopKeepHDRBrightnessModeCheckbox.IsEnabled = false;
+                        }
+                        if (capabilities.IsBrightnessControlSupported 
+                            && (!laptopKeepHDRBrightnessModeCheckbox.IsEnabled || !laptopKeepHDRBrightnessModeCheckbox.IsChecked.Value))
+                        {
+                            sdrBoostSliderLabel.Text = "HDR 内容亮度";
+                        }
+                        else
+                        {
+                            sdrBoostSliderLabel.Text = "SDR 内容亮度";
                         }
                     });
         }
