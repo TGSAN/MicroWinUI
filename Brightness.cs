@@ -1,11 +1,12 @@
 using System;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Management;
 using System.Runtime.InteropServices;
 
 namespace MicroWinUI
 {
-    internal static class BrightnessPersistence
+    internal static class Brightness
     {
         // Public entry point: level in [0..1]
         public static void TryPersistBrightness(double level)
@@ -59,6 +60,34 @@ namespace MicroWinUI
                 }
             }
             catch { }
+        }
+
+        public static double TryGetCurrentBrightnessLevel()
+        {
+            try
+            {
+                var scope = new ManagementScope(@"\\.\root\WMI");
+                scope.Connect();
+                var q = new ObjectQuery($"SELECT * FROM WmiMonitorBrightness");
+                using (var searcher = new ManagementObjectSearcher(scope, q))
+                using (var results = searcher.Get())
+                {
+                    foreach (ManagementObject mo in results)
+                    {
+                        var val = mo["CurrentBrightness"];
+                        if (val != null)
+                        {
+                            var level = Convert.ToByte(val) * 0.01;
+                            return level;
+                        }
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"WMI brightness query failed: {ex.Message}");
+            }
+            return 0.5;
         }
     }
 }

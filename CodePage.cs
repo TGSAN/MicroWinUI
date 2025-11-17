@@ -18,7 +18,8 @@ using Windows.Foundation; // for Size
 using Windows.UI.Xaml.Media; // for Brush
 using Windows.UI; // for Color fallback
 using Windows.UI.ViewManagement; // for UISettings
-using System.Collections.Concurrent; // for ConcurrentDictionary
+using System.Collections.Concurrent;
+using System.Threading; // for ConcurrentDictionary
 
 namespace MicroWinUI
 {
@@ -27,7 +28,6 @@ namespace MicroWinUI
         CoreWindow coreWindow = CoreWindow.GetForCurrentThread();
         IslandWindow coreWindowHost;
         DisplayEnhancementOverride displayEnhancementOverride;
-        BrightnessOverride brightnessOverride;
         DisplayInformation displayInfo;
         ScrollViewer scrollViewer; // scroll container
         StackPanel mainStackPanel;
@@ -46,6 +46,7 @@ namespace MicroWinUI
         UISettings uiSettings; // 监听系统颜色/主题变化
 
         private readonly ConcurrentDictionary<string, ConcurrentDictionary<double, double>> BrightnessNitsCache = new();
+        private WmiBrightnessWatcher wmiBrightnessWatcher; // WMI brightness watcher for current monitor
 
         public CodePage(IslandWindow coreWindowHost)
         {
@@ -54,9 +55,6 @@ namespace MicroWinUI
 
             uiSettings = new UISettings();
             uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged; // 系统主题或强调色变化时触发
-
-            // 并行预热亮度百分比到尼特值的映射缓存
-            _ = BuildBrightnessMappingAsync();
 
             //new Task(async () =>
             //{
@@ -72,16 +70,6 @@ namespace MicroWinUI
             //    }
             //}).Start();
 
-            brightnessOverride = BrightnessOverride.GetForCurrentView();
-            brightnessOverride.IsOverrideActiveChanged += (s, e) =>
-            {
-                var nits = TryGetNitsFromBrightnessLevel(s.BrightnessLevel);
-                Debug.WriteLine($"IsOverrideActiveChanged: {s.IsOverrideActive}");
-                Debug.WriteLine($"BrightnessLevelChanged: {s.BrightnessLevel}, {nits} Nits");
-                //BrightnessPersistence.TryPersistBrightness(s.BrightnessLevel);
-                UpdateDisplayInfo();
-            };
-            brightnessOverride.StartOverride();
             displayEnhancementOverride = DisplayEnhancementOverride.GetForCurrentView();
             var colorSettings = ColorOverrideSettings.CreateFromDisplayColorOverrideScenario(DisplayColorOverrideScenario.Accurate);
             displayEnhancementOverride.ColorOverrideSettings = colorSettings;
@@ -89,9 +77,7 @@ namespace MicroWinUI
             {
                 displayEnhancementOverride.RequestOverride();
             }
-            //var brightnessSettings = BrightnessOverrideSettings.CreateFromNits(80);
-            //brightnessOverride.SetBrightnessLevel(brightnessSettings.DesiredLevel, DisplayBrightnessOverrideOptions.None);
-            brightnessOverride.SetBrightnessScenario(DisplayBrightnessScenario.DefaultBrightness, DisplayBrightnessOverrideOptions.None);
+
             displayInfo = DisplayInformation.GetForCurrentView();
             displayInfo.AdvancedColorInfoChanged += DisplayInfo_AdvancedColorInfoChanged;
 
@@ -322,7 +308,48 @@ namespace MicroWinUI
             mainStackPanel.Loaded += MainStackPanel_Loaded;
             this.SizeChanged += CodePage_SizeChanged;
             this.Loaded += CodePage_Loaded;
+            this.Unloaded += CodePage_Unloaded;
             UpdateResponsiveLayout();
+            // Init WMI brightness watcher for current window's monitor
+            InitializeWmiBrightnessWatcher();
+        }
+
+        private void CodePage_Unloaded(object sender, RoutedEventArgs e)
+        {
+            try { wmiBrightnessWatcher?.Dispose(); } catch { }
+        }
+
+        private void InitializeWmiBrightnessWatcher()
+        {
+            try
+            {
+                var hwnd = coreWindowHost.coreWindowHWND;
+                var interfacePath = Win32API.TryGetMonitorInterfaceIdFromWindow(hwnd); // \\?\DISPLAY#...
+                var wmiInstance = Win32API.TryConvertMonitorDevicePathToWmiInstanceName(interfacePath);
+                if (!string.IsNullOrEmpty(wmiInstance))
+                {
+                    wmiBrightnessWatcher?.Dispose();
+                    wmiBrightnessWatcher = new WmiBrightnessWatcher(wmiInstance);
+                    wmiBrightnessWatcher.BrightnessChanged += (s, b) =>
+                    {
+                        // Only update UI; we could also reflect the value if needed
+                        _ = this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+                        {
+                            Debug.WriteLine($"WMI BrightnessChanged: {b}% for {wmiInstance}");
+                            var brightnessLevel = b * 0.001;
+                            var nits = TryGetNitsFromBrightnessLevel(brightnessLevel);
+                            Debug.WriteLine($"{brightnessLevel}, {nits} Nits");
+                            //BrightnessPersistence.TryPersistBrightness(brightnessLevel);
+                            UpdateDisplayInfo();
+                        });
+                    };
+                    wmiBrightnessWatcher.Start();
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"InitializeWmiBrightnessWatcher failed: {ex}");
+            }
         }
 
         private void CodePage_Loaded(object sender, RoutedEventArgs e)
@@ -331,6 +358,11 @@ namespace MicroWinUI
             // ensure layout evaluates once content is loaded
             UpdateResponsiveLayout();
             ApplyCardBackgroundForTheme(); // 初始化主题背景
+            // 并行预热亮度百分比到尼特值的映射缓存
+            new Thread(() =>
+            {
+                _ = BuildBrightnessMappingAsync();
+            }).Start();
         }
 
         private void UiSettings_ColorValuesChanged(UISettings sender, object args)
@@ -577,7 +609,8 @@ namespace MicroWinUI
                     {
                         var currentDisplayMonitor = await GetCurrentDisplayMonitorForCoreWindow();
                         var capabilities = displayEnhancementOverride.GetCurrentDisplayEnhancementOverrideCapabilities();
-                        var nits = TryGetNitsFromBrightnessLevel(brightnessOverride.BrightnessLevel);
+                        var brightnessLevel = Brightness.TryGetCurrentBrightnessLevel();
+                        var nits = TryGetNitsFromBrightnessLevel(brightnessLevel);
                         var colorInfo = displayInfo.GetAdvancedColorInfo();
                         var advancedColor = colorInfo.CurrentAdvancedColorKind;
                         var advancedColorStr = "SDR";
@@ -662,7 +695,7 @@ namespace MicroWinUI
                                 addRow("精确式系统亮度调节最高亮度", $"{nitsRanges[0].MaxNits} 尼特");
                                 addRow("精确式系统亮度调节最低亮度", $"{nitsRanges[0].MinNits} 尼特");
                             }
-                            var sdrBrightness = (brightnessOverride.BrightnessLevel * 100.0).ToString("F0");
+                            var sdrBrightness = (brightnessLevel * 100.0).ToString("F0");
                             var sdrValue = capabilities.IsBrightnessNitsControlSupported
                                 ? $"{sdrBrightness}% ({nits} 尼特)"
                                 : $"{sdrBrightness}%";
@@ -748,7 +781,7 @@ namespace MicroWinUI
             }
             else
             {
-                var currentBrightnessSettings = BrightnessOverrideSettings.CreateFromLevel(brightnessOverride.BrightnessLevel);
+                var currentBrightnessSettings = BrightnessOverrideSettings.CreateFromLevel(brightnessLevel);
                 return currentBrightnessSettings.DesiredNits;
             }
         }

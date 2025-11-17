@@ -249,6 +249,36 @@ namespace MicroWinUICore
             catch { }
             return null;
         }
+
+        /// <summary>
+        /// Convert monitor device path (e.g. "\\\\?\\DISPLAY#DEL4098#5&10a58962&0&UID4353#{...}")
+        /// to WMI InstanceName (e.g. "DISPLAY\\DEL4098\\5&10a58962&0&UID4353").
+        /// </summary>
+        public static string TryConvertMonitorDevicePathToWmiInstanceName(string monitorDevicePath)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(monitorDevicePath)) return null;
+                string path = monitorDevicePath;
+                // Trim prefix
+                const string prefix = "\\\\?\\DISPLAY#";
+                if (path.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+                {
+                    path = path.Substring(prefix.Length);
+                }
+                // Remove trailing GUID section "#{...}"
+                int guidIndex = path.IndexOf("#{", StringComparison.OrdinalIgnoreCase);
+                if (guidIndex >= 0)
+                {
+                    path = path.Substring(0, guidIndex);
+                }
+                // Replace remaining '#' with '\\'
+                path = path.Replace('#', '\\');
+                // Prepend WMI class root name
+                return "DISPLAY\\" + path;
+            }
+            catch { return null; }
+        }
         // ===============================================================
     }
 }
