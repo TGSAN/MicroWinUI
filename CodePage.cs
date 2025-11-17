@@ -310,6 +310,12 @@ namespace MicroWinUI
         {
             var nits = (sdrBoostSlider.Value * 4) + 80; // 0-100 映射到 80-480 Nits
             Debug.WriteLine($"Set {nits} Nits");
+            // Apply to the monitor that hosts this CoreWindow
+            var hwnd = coreWindowHost?.coreWindowHWND ?? IntPtr.Zero;
+            if (hwnd != IntPtr.Zero)
+            {
+                _ = SdrWhiteLevel.TrySetForWindow(hwnd, nits);
+            }
         }
 
         private void CodePage_Unloaded(object sender, RoutedEventArgs e)

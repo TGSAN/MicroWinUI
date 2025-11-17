@@ -169,6 +169,9 @@ namespace MicroWinUICore
         [DllImport("user32.dll")]
         private static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_TARGET_DEVICE_NAME requestPacket);
 
+        [DllImport("user32.dll")]
+        private static extern int DisplayConfigSetDeviceInfo(IntPtr setPacket);
+
         [StructLayout(LayoutKind.Sequential)] private struct LUID { public uint LowPart; public int HighPart; }
         [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_PATH_SOURCE_INFO { public LUID adapterId; public uint id; public uint modeInfoIdx; public uint statusFlags; }
         [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_RATIONAL { public uint Numerator; public uint Denominator; }
@@ -195,8 +198,92 @@ namespace MicroWinUICore
         [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_2DREGION { public uint cx; public uint cy; }
         [StructLayout(LayoutKind.Sequential)] private struct POINTL { public int x; public int y; }
 
+        // ======= SDR white level interop =======
+        private const int ERROR_SUCCESS = 0;
+        private const int ERROR_INSUFFICIENT_BUFFER = 122;
+        private const int DISPLAYCONFIG_DEVICE_INFO_SET_SDR_WHITE_LEVEL_INTERNAL = unchecked((int)0xFFFFFFEE);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DISPLAYCONFIG_SDR_WHITE_LEVEL
+        {
+            public DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+            public uint SDRWhiteLevel;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct DISPLAYCONFIG_SET_SDR_WHITE_LEVEL
+        {
+            public DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+            public uint SDRWhiteLevel;
+            public byte finalValue;
+        }
+
+        private static int SetDeviceInfo<T>(ref T packet) where T : struct
+        {
+            IntPtr ptr = IntPtr.Zero;
+            try
+            {
+                int size = Marshal.SizeOf(typeof(T));
+                ptr = Marshal.AllocHGlobal(size);
+                Marshal.StructureToPtr(packet, ptr, false);
+                int result = DisplayConfigSetDeviceInfo(ptr);
+                return result;
+            }
+            finally
+            {
+                if (ptr != IntPtr.Zero)
+                {
+                    Marshal.FreeHGlobal(ptr);
+                }
+            }
+        }
+
+        private static int QueryActivePaths(out DISPLAYCONFIG_PATH_INFO[] paths, out DISPLAYCONFIG_MODE_INFO[] modes)
+        {
+            paths = null;
+            modes = null;
+            uint numPath = 0, numMode = 0;
+            int result;
+            while (true)
+            {
+                result = GetDisplayConfigBufferSizes(QDC_ONLY_ACTIVE_PATHS, out numPath, out numMode);
+                if (result != 0) return result;
+                if (numPath == 0) return 0;
+                var p = new DISPLAYCONFIG_PATH_INFO[numPath];
+                var m = new DISPLAYCONFIG_MODE_INFO[numMode];
+                var nPath = numPath; var nMode = numMode;
+                result = QueryDisplayConfig(QDC_ONLY_ACTIVE_PATHS, ref nPath, p, ref nMode, m, IntPtr.Zero);
+                if (result == 0)
+                {
+                    paths = p; modes = m; return 0;
+                }
+                if (result != ERROR_INSUFFICIENT_BUFFER) return result;
+                // retry
+            }
+        }
+
+        private static int PathSetSdrWhite(DISPLAYCONFIG_PATH_INFO path, int nits)
+        {
+            if (nits < 80) nits = 80;
+            if (nits > 480) nits = 480;
+            if ((nits % 4) != 0) nits += 4 - (nits % 4);
+            var set = new DISPLAYCONFIG_SET_SDR_WHITE_LEVEL
+            {
+                header = new DISPLAYCONFIG_DEVICE_INFO_HEADER
+                {
+                    type = (DISPLAYCONFIG_DEVICE_INFO_TYPE)DISPLAYCONFIG_DEVICE_INFO_SET_SDR_WHITE_LEVEL_INTERNAL,
+                    size = Marshal.SizeOf(typeof(DISPLAYCONFIG_SET_SDR_WHITE_LEVEL)),
+                    adapterId = path.targetInfo.adapterId,
+                    id = path.targetInfo.id
+                },
+                SDRWhiteLevel = (uint)(nits * 1000 / 80),
+                finalValue = 1
+            };
+            return SetDeviceInfo(ref set);
+        }
+
         /// <summary>
-        /// Return monitor interface path (\\\\?\\DISPLAY#...) for the monitor containing given HWND, or null.
+        /// Return monitor interface path (\\\?\\DISPLAY#...) for the monitor containing given HWND, or null.
         /// </summary>
         public static string TryGetMonitorInterfaceIdFromWindow(IntPtr hwnd)
         {
@@ -243,7 +330,7 @@ namespace MicroWinUICore
                         }
                     };
                     if (DisplayConfigGetDeviceInfo(ref targetReq) != 0) return null;
-                    return targetReq.monitorDevicePath; // \\?\\DISPLAY#...
+                    return targetReq.monitorDevicePath; // \\\?\\DISPLAY#...
                 }
             }
             catch { }
@@ -278,6 +365,50 @@ namespace MicroWinUICore
                 return "DISPLAY\\" + path;
             }
             catch { return null; }
+        }
+
+        /// <summary>
+        /// Set SDR white nits for the monitor that hosts the given window.
+        /// </summary>
+        internal static bool TrySetSdrWhiteForWindowMonitor(IntPtr hwnd, int nits)
+        {
+            try
+            {
+                var interfacePath = TryGetMonitorInterfaceIdFromWindow(hwnd);
+                if (string.IsNullOrEmpty(interfacePath)) return false;
+                return TrySetSdrWhiteForMonitorDevicePath(interfacePath, nits);
+            }
+            catch { return false; }
+        }
+
+        /// <summary>
+        /// Set SDR white nits for a monitor given by its interface device path (\\?\DISPLAY#...).
+        /// </summary>
+        internal static bool TrySetSdrWhiteForMonitorDevicePath(string monitorDevicePath, int nits)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(monitorDevicePath)) return false;
+                if (QueryActivePaths(out var paths, out var modes) != 0 || paths == null) return false;
+                for (int i = 0; i < paths.Length; i++)
+                {
+                    var targetReq = new DISPLAYCONFIG_TARGET_DEVICE_NAME
+                    {
+                        header = new DISPLAYCONFIG_DEVICE_INFO_HEADER
+                        {
+                            type = DISPLAYCONFIG_DEVICE_INFO_TYPE.GET_TARGET_NAME,
+                            size = Marshal.SizeOf(typeof(DISPLAYCONFIG_TARGET_DEVICE_NAME)),
+                            adapterId = paths[i].targetInfo.adapterId,
+                            id = paths[i].targetInfo.id
+                        }
+                    };
+                    if (DisplayConfigGetDeviceInfo(ref targetReq) != 0) continue;
+                    if (!string.Equals(targetReq.monitorDevicePath, monitorDevicePath, StringComparison.OrdinalIgnoreCase)) continue;
+                    return PathSetSdrWhite(paths[i], nits) == ERROR_SUCCESS;
+                }
+            }
+            catch { }
+            return false;
         }
         // ===============================================================
     }
