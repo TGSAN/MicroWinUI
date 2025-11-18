@@ -1,6 +1,8 @@
 ﻿using MicroWinUI;
 using System;
 using System.Diagnostics;
+using System.IO.Ports;
+using System.Text;
 using System.Windows.Forms;
 using Windows.UI.Xaml.Controls;
 
@@ -8,11 +10,43 @@ namespace MicroWinUICore
 {
     public static class Program
     {
+        static bool SettingHide = false;
+        static bool SettingEnableKeepHDR = false;
+        static bool SettingDisableNotify = false;
+
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            foreach (string arg in args)
+            {
+                if (arg.Equals("--help", StringComparison.OrdinalIgnoreCase) || arg.Equals("-h", StringComparison.OrdinalIgnoreCase))
+                {
+                    StringBuilder stringBuilder = new StringBuilder();
+                    stringBuilder.AppendLine("命令行参数");
+                    stringBuilder.AppendLine();
+                    stringBuilder.AppendLine("--help, -h\t\t\t显示此帮助信息");
+                    stringBuilder.AppendLine("--hide\t\t\t启动时隐藏主界面");
+                    stringBuilder.AppendLine("--enable-keep-hdr, -k\t启动时默认打开\"保持 HDR 亮度模式\"");
+                    stringBuilder.AppendLine("--disable-notify\t\t不要显示任何通知");
+                    MessageBox.Show(stringBuilder.ToString().Trim());
+                    return;
+                }
+                else if (arg.Equals("--hide", StringComparison.OrdinalIgnoreCase))
+                {
+                    SettingHide = true;
+                }
+                else if (arg.Equals("--enable-keep-hdr", StringComparison.OrdinalIgnoreCase) || arg.Equals("-k", StringComparison.OrdinalIgnoreCase))
+                {
+                    SettingEnableKeepHDR = true;
+                }
+                else if (arg.Equals("--disable-notify", StringComparison.OrdinalIgnoreCase))
+                {
+                    SettingDisableNotify = true;
+                }
+            }
 
             App app = new();
 
@@ -43,21 +77,41 @@ namespace MicroWinUICore
             var hideWindow = () =>
             {
                 Win32API.ShowWindow(window.Handle, Win32API.SW_RESTORE); // 防止恢复的时候处于最小化状态找不到
-                window.Content = null;
                 window.Hide();
+                page.Visibility = Windows.UI.Xaml.Visibility.Collapsed; // 停止渲染
+                window.Content = null;
                 page.VideoStop();
-                page.Visibility = Windows.UI.Xaml.Visibility.Collapsed; // 停止渲染，节省资源
-                notifyIcon.BalloonTipTitle = "正在后台继续运行";
-                notifyIcon.BalloonTipText = "已最小化至系统托盘，可通过点击托盘图标或通知显示主界面";
-                notifyIcon.BalloonTipClicked += (s, e) =>
+                if (!SettingDisableNotify)
                 {
-                    showWindow();
-                };
-                notifyIcon.ShowBalloonTip(2500);
+                    notifyIcon.BalloonTipClicked += (s, e) =>
+                    {
+                        showWindow();
+                    };
+                    notifyIcon.ShowBalloonTip(2500, "正在后台继续运行", "已最小化至系统托盘，可通过点击托盘图标或通知显示主界面", ToolTipIcon.None);
+                }
                 GC.Collect();
                 GC.WaitForPendingFinalizers();
                 GC.Collect();
             };
+
+            if (SettingHide)
+            {
+                window.Load += (object sender, EventArgs e) => {
+                    window.BeginInvoke(new Action(() =>
+                    {
+                        hideWindow();
+                        window.Enabled = true;
+                        window.Opacity = 1;
+                    }));
+                };
+                window.Enabled = false;
+                window.Opacity = 0;
+            }
+
+            if (SettingEnableKeepHDR)
+            {
+                page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn = true;
+            }
 
             using TrayFlyoutManager trayManager = new (window, notifyIcon);
 
@@ -92,7 +146,7 @@ namespace MicroWinUICore
                         flyout.Items.Add(showItem);
                     }
                     flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
-                    var laptopKeepHDRBrightnessModeToggleItem = trayManager.CreateMenuFlyoutItem("笔记本电脑保持 HDR 亮度模式", () =>
+                    var laptopKeepHDRBrightnessModeToggleItem = trayManager.CreateMenuFlyoutItem("保持 HDR 亮度模式", () =>
                     {
                         page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn = !page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn;
                     });
