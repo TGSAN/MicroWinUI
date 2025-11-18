@@ -1,7 +1,6 @@
 ﻿using MicroWinUI;
 using System;
 using System.Windows.Forms;
-using Windows.UI.Xaml.Controls;
 using System.Diagnostics;
 
 namespace MicroWinUICore
@@ -35,18 +34,17 @@ namespace MicroWinUICore
             notifyIcon.MouseClick += (s, e) =>
             {
                 if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Right) return;
-                var flyout = new MenuFlyout();
-                var hdrItem = new MenuFlyoutItem { Text = "HDR 设置" };
-                hdrItem.Click += (cs, ce) => { try { Process.Start("ms-settings:display-hdr"); } catch { } };
-                flyout.Items.Add(hdrItem);
-                var exitItem = new MenuFlyoutItem { Text = "退出" };
-                exitItem.Click += (cs, ce) =>
+
+                var flyout = trayManager.CreateFlyout();
+
+                flyout.Items.Add(trayManager.CreateItem("HDR 设置", () => Process.Start("ms-settings:display-hdr")));
+                flyout.Items.Add(trayManager.CreateItem("退出", () =>
                 {
                     try { notifyIcon.Visible = false; notifyIcon.Dispose(); } catch { }
                     try { window.Close(); } catch { }
                     try { Application.Exit(); } catch { }
-                };
-                flyout.Items.Add(exitItem);
+                }));
+
                 trayManager.ShowFlyoutAtCursor(flyout);
             };
 

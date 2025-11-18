@@ -6,6 +6,10 @@ using Windows.Foundation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
 using Windows.UI.Core; // for dispatcher
+using Windows.UI.Xaml; // Style, CornerRadius, Thickness
+using Windows.UI.Xaml.Media; // Brush, AcrylicBrush, SolidColorBrush
+using Windows.UI; // Color
+using Windows.UI.ViewManagement; // UISettings
 
 namespace MicroWinUICore
 {
@@ -23,10 +27,40 @@ namespace MicroWinUICore
         private Page _anchorPage;
         private MenuFlyout _activeFlyout;
 
+        // Lazily created styles to keep Program.cs clean
+        private Style _presenterStyle;
+        private Style _itemCornerStyle;
+
         public TrayFlyoutManager(IslandWindow mainWindow, NotifyIcon notifyIcon)
         {
             _mainWindow = mainWindow ?? throw new ArgumentNullException(nameof(mainWindow));
             _notifyIcon = notifyIcon ?? throw new ArgumentNullException(nameof(notifyIcon));
+        }
+
+        /// <summary>
+        /// Provide a pre-styled MenuFlyout that matches the app's theme with acrylic/fallback background.
+        /// </summary>
+        public MenuFlyout CreateFlyout()
+        {
+            EnsureStyles();
+            var flyout = new MenuFlyout();
+            try { flyout.MenuFlyoutPresenterStyle = _presenterStyle; } catch (Exception ex) { Debug.WriteLine("Presenter style apply failed: " + ex.Message); }
+            return flyout;
+        }
+
+        /// <summary>
+        /// Provide a pre-styled MenuFlyoutItem with click handler.
+        /// </summary>
+        public MenuFlyoutItem CreateItem(string text, Action onClick)
+        {
+            EnsureStyles();
+            var item = new MenuFlyoutItem { Text = text ?? string.Empty };
+            try { if (_itemCornerStyle != null) item.Style = _itemCornerStyle; } catch (Exception ex) { Debug.WriteLine("Item style apply failed: " + ex.Message); }
+            if (onClick != null)
+            {
+                item.Click += (s, e) => { try { onClick(); } catch { } };
+            }
+            return item;
         }
 
         /// <summary>
@@ -66,6 +100,73 @@ namespace MicroWinUICore
                 Position = new Point(0, 0)
             };
             _activeFlyout.ShowAt(_anchorPage, options);
+        }
+
+        private void EnsureStyles()
+        {
+            if (_presenterStyle == null)
+            {
+                try
+                {
+                    _presenterStyle = new Style(typeof(MenuFlyoutPresenter));
+                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.CornerRadiusProperty, new CornerRadius(8)));
+                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.BackgroundProperty, BuildFlyoutBackground()));
+                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.PaddingProperty, new Thickness(4, 0, 4, 0)));
+                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.BorderThicknessProperty, new Thickness(0.5)));
+                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.MarginProperty, new Thickness(0)));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Presenter style creation failed: " + ex.Message);
+                }
+            }
+
+            if (_itemCornerStyle == null)
+            {
+                try
+                {
+                    _itemCornerStyle = new Style(typeof(MenuFlyoutItem));
+                    _itemCornerStyle.Setters.Add(new Setter(MenuFlyoutItem.CornerRadiusProperty, new CornerRadius(6)));
+                    _itemCornerStyle.Setters.Add(new Setter(MenuFlyoutItem.PaddingProperty, new Thickness(0)));
+                    _itemCornerStyle.Setters.Add(new Setter(MenuFlyoutItem.MarginProperty, new Thickness(0)));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("Item corner style creation failed: " + ex.Message);
+                }
+            }
+        }
+
+        // helper to build a reliable acrylic/fallback brush each time
+        private Brush BuildFlyoutBackground()
+        {
+            try
+            {
+                var ui = new UISettings();
+                var isDark = _mainWindow.ActualTheme == ElementTheme.Dark;
+                var tint = isDark ? Color.FromArgb(0xD0, 0x00, 0x00, 0x00) : Color.FromArgb(0xD0, 0xFF, 0xFF, 0xFF);
+                var fallback = isDark ? Color.FromArgb(0xE6, 0x22, 0x22, 0x22) : Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF);
+
+                bool effectsEnabled = true;
+                try { effectsEnabled = ui.AdvancedEffectsEnabled; } catch { }
+                if (!effectsEnabled)
+                {
+                    return new SolidColorBrush(fallback);
+                }
+
+                var acrylic = new AcrylicBrush
+                {
+                    BackgroundSource = AcrylicBackgroundSource.Backdrop,
+                    TintColor = tint,
+                    TintOpacity = 1,
+                    FallbackColor = fallback
+                };
+                return acrylic;
+            }
+            catch
+            {
+                return new SolidColorBrush(Color.FromArgb(0xD0, 0xFF, 0xFF, 0xFF));
+            }
         }
 
         private void FlyoutHost_Deactivate(object sender, EventArgs e)

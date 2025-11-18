@@ -77,7 +77,11 @@ namespace MicroWinUICore
         {
             uiSettings.ColorValuesChanged += (s, e) =>
             {
-                Invoke(UpdateTheme);
+                try
+                {
+                    Invoke(UpdateTheme);
+                }
+                catch { }
             };
             xamlHost.HandleCreated += XamlHost_HandleCreated;
             xamlHost.SizeChanged += XamlHost_SizeChanged;
