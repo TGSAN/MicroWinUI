@@ -48,6 +48,7 @@ namespace MicroWinUI
         MediaPlayerElement hdrDemoPlayer;
         List<DisplayMonitor> monitors = new List<DisplayMonitor>();
         UISettings uiSettings; // 监听系统颜色/主题变化
+        bool _exitConfirmed = false; // 跳过二次确认
 
         public bool IsBrightnessNitsControlSupportedForCurrentMonitor
         {
@@ -77,6 +78,9 @@ namespace MicroWinUI
 
             this.coreWindowHost = coreWindowHost;
             this.coreWindowHost.coreWindowHWND = this.coreWindow.GetInterop().GetWindowHandle();
+
+            // 关闭按钮确认
+            this.coreWindowHost.FormClosing += CoreWindowHost_FormClosing;
 
             uiSettings = new UISettings();
             uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged; // 系统主题或强调色变化时触发
@@ -350,6 +354,59 @@ namespace MicroWinUI
             UpdateResponsiveLayout();
             // Init WMI brightness watcher for current window's monitor
             InitializeWmiBrightnessWatcher();
+        }
+
+        private async void CoreWindowHost_FormClosing(object sender, System.Windows.Forms.FormClosingEventArgs e)
+        {
+            try
+            {
+                if (_exitConfirmed)
+                {
+                    return; // 允许直接关闭
+                }
+                if (e.CloseReason == System.Windows.Forms.CloseReason.UserClosing)
+                {
+                    e.Cancel = true; // 先拦截
+                    await this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, async () =>
+                    {
+                        try
+                        {
+                            var dialog = new ContentDialog
+                            {
+                                Title = "是否要推出？",
+                                Content = "退出程序还是最小化到托盘以便后台运行",
+                                PrimaryButtonText = "退出程序",
+                                SecondaryButtonText = "最小化到托盘",
+                                CloseButtonText = "取消",
+                                DefaultButton = ContentDialogButton.Close,
+                                XamlRoot = this.XamlRoot
+                            };
+                            var result = await dialog.ShowAsync();
+                            if (result == ContentDialogResult.Primary)
+                            {
+                                _exitConfirmed = true;
+                                try { coreWindowHost.BeginInvoke((Action)(() => { try { coreWindowHost.Close(); } catch { } })); } catch { }
+                            }
+                            else if (result == ContentDialogResult.Secondary)
+                            {
+                                Program.HideWindow();
+                            }
+                            else
+                            {
+                                // 取消：什么都不做
+                            }
+                        }
+                        catch (Exception ex)
+                        {
+                            Debug.WriteLine($"Close confirm dialog failed: {ex}");
+                        }
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine($"FormClosing handler error: {ex}");
+            }
         }
 
         public void VideoStop()

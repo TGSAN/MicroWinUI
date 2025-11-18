@@ -15,6 +15,8 @@ namespace MicroWinUICore
         static bool SettingHide = false;
         static bool SettingEnableKeepHDR = false;
         static bool SettingDisableNotify = false;
+        public static Action ShowWindow;
+        public static Action HideWindow;
 
         [STAThread]
         static void Main(string[] args)
@@ -68,7 +70,7 @@ namespace MicroWinUICore
                 Visible = true
             };
 
-            var showWindow = () =>
+            ShowWindow = () =>
             {
                 page.VideoStart();
                 page.Visibility = Windows.UI.Xaml.Visibility.Visible; // 恢复渲染
@@ -78,7 +80,7 @@ namespace MicroWinUICore
                 window.Activate();
             };
 
-            var hideWindow = () =>
+            HideWindow = () =>
             {
                 Win32API.ShowWindow(window.Handle, Win32API.SW_RESTORE); // 防止恢复的时候处于最小化状态找不到
                 window.Hide();
@@ -89,7 +91,7 @@ namespace MicroWinUICore
                 {
                     notifyIcon.BalloonTipClicked += (s, e) =>
                     {
-                        showWindow();
+                        ShowWindow();
                     };
                     notifyIcon.ShowBalloonTip(2500, "正在后台继续运行", "已最小化至系统托盘，可通过点击托盘图标或通知显示主界面", ToolTipIcon.None);
                 }
@@ -104,7 +106,7 @@ namespace MicroWinUICore
                 {
                     window.BeginInvoke(new Action(() =>
                     {
-                        hideWindow();
+                        HideWindow();
                         window.Enabled = true;
                         window.Opacity = 1;
                     }));
@@ -130,7 +132,7 @@ namespace MicroWinUICore
                     {
                         var hideItem = trayManager.CreateMenuFlyoutItem("隐藏主窗口", () =>
                         {
-                            hideWindow();
+                            HideWindow();
                         });
                         hideItem.Icon = new FontIcon
                         {
@@ -142,7 +144,7 @@ namespace MicroWinUICore
                     {
                         var showItem = trayManager.CreateMenuFlyoutItem("显示主窗口", () =>
                         {
-                            showWindow();
+                            ShowWindow();
                         });
                         showItem.Icon = new FontIcon
                         {
@@ -238,7 +240,7 @@ namespace MicroWinUICore
                 }
                 else if (e.Button == MouseButtons.Left)
                 {
-                    showWindow();
+                    ShowWindow();
                 }
             };
 
