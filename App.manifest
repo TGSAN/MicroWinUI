@@ -24,13 +24,11 @@
     <windowsSettings>
       <autoElevate xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">False</autoElevate>
       <disableTheming xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">False</disableTheming>
-      <dpiAware xmlns="http://schemas.microsoft.com/SMI/2005/WindowsSettings">True/PM</dpiAware>
       <disableWindowFiltering xmlns="http://schemas.microsoft.com/SMI/2011/WindowsSettings">True</disableWindowFiltering>
       <printerDriverIsolation xmlns="http://schemas.microsoft.com/SMI/2011/WindowsSettings">True</printerDriverIsolation>
       <highResolutionScrollingAware xmlns="http://schemas.microsoft.com/SMI/2013/WindowsSettings">True</highResolutionScrollingAware>
       <ultraHighResolutionScrollingAware xmlns="http://schemas.microsoft.com/SMI/2013/WindowsSettings">True</ultraHighResolutionScrollingAware>
       <forceFocusBasedMouseWheel xmlns="http://schemas.microsoft.com/SMI/2014/WindowsSettings">False</forceFocusBasedMouseWheel>
-      <dpiAwareness xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">PerMonitorV2, PerMonitor, System, Unaware</dpiAwareness>
       <longPathAware xmlns="http://schemas.microsoft.com/SMI/2016/WindowsSettings">True</longPathAware>
       <gdiScaling xmlns="http://schemas.microsoft.com/SMI/2017/WindowsSettings">False</gdiScaling>
       <activeCodePage xmlns="http://schemas.microsoft.com/SMI/2019/WindowsSettings">UTF-8</activeCodePage>

@@ -1,7 +1,8 @@
 ﻿using MicroWinUI;
 using System;
-using System.Windows.Forms;
 using System.Diagnostics;
+using System.Windows.Forms;
+using Windows.UI.Xaml.Controls;
 
 namespace MicroWinUICore
 {
@@ -15,11 +16,11 @@ namespace MicroWinUICore
 
             App app = new();
 
-            var window = new IslandWindow();
-            var page = new CodePage(window);
+            IslandWindow window = new ();
+            CodePage page = new (window);
             window.Content = page;
-            window.ClientSize = new System.Drawing.Size(1280, 720);
-            window.MinimumSize = new System.Drawing.Size(480, 480);
+            window.ClientSize = new (1280, 720);
+            window.MinimumSize = new (480, 480);
             window.Text = "DisplayInfo";
 
             var notifyIcon = new NotifyIcon
@@ -29,23 +30,101 @@ namespace MicroWinUICore
                 Visible = true
             };
 
-            using var trayManager = new TrayFlyoutManager(window, notifyIcon);
+            var showWindow = () =>
+            {
+                window.Show();
+                Win32API.ShowWindow(window.Handle, Win32API.SW_RESTORE);
+                window.Activate();
+            };
+
+            var hideWindow = () =>
+            {
+                Win32API.ShowWindow(window.Handle, Win32API.SW_RESTORE); // 防止恢复的时候处于最小化状态找不到
+                window.Hide();
+                notifyIcon.BalloonTipTitle = "正在后台继续运行";
+                notifyIcon.BalloonTipText = "已最小化至系统托盘，可通过点击托盘图标或通知显示主界面";
+                notifyIcon.BalloonTipClicked += (s, e) =>
+                {
+                    showWindow();
+                };
+                notifyIcon.ShowBalloonTip(2500);
+            };
+
+            using TrayFlyoutManager trayManager = new (window, notifyIcon);
 
             notifyIcon.MouseClick += (s, e) =>
             {
-                if (e.Button != MouseButtons.Left && e.Button != MouseButtons.Right) return;
-
-                var flyout = trayManager.CreateFlyout();
-
-                flyout.Items.Add(trayManager.CreateItem("HDR 设置", () => Process.Start("ms-settings:display-hdr")));
-                flyout.Items.Add(trayManager.CreateItem("退出", () =>
+                if (e.Button == MouseButtons.Right)
                 {
-                    try { notifyIcon.Visible = false; notifyIcon.Dispose(); } catch { }
-                    try { window.Close(); } catch { }
-                    try { Application.Exit(); } catch { }
-                }));
+                    var flyout = trayManager.CreateFlyout();
 
-                trayManager.ShowFlyoutAtCursor(flyout);
+                    if (window.Visible)
+                    {
+                        var hideItem = trayManager.CreateMenuFlyoutItem("隐藏主窗口", () =>
+                        {
+                            hideWindow();
+                        });
+                        hideItem.Icon = new FontIcon
+                        {
+                            Glyph = "\uE73F"
+                        };
+                        flyout.Items.Add(hideItem);
+                    }
+                    else
+                    {
+                        var showItem = trayManager.CreateMenuFlyoutItem("显示主窗口", () =>
+                        {
+                            showWindow();
+                        });
+                        showItem.Icon = new FontIcon
+                        {
+                            Glyph = "\uE8A7"
+                        };
+                        flyout.Items.Add(showItem);
+                    }
+                    flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
+                    var laptopKeepHDRBrightnessModeToggleItem = trayManager.CreateMenuFlyoutItem("笔记本电脑保持 HDR 亮度模式", () =>
+                    {
+                        page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn = !page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn;
+                    });
+                    laptopKeepHDRBrightnessModeToggleItem.Icon = new FontIcon
+                    {
+                        Glyph = page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn ? "\uE73A" : "\uE739"
+                    };
+                    laptopKeepHDRBrightnessModeToggleItem.IsEnabled = page.laptopKeepHDRBrightnessModeToggleSwitch.IsEnabled;
+                    flyout.Items.Add(laptopKeepHDRBrightnessModeToggleItem);
+                    flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
+                    var hdrSettingsItem = trayManager.CreateMenuFlyoutItem("HDR 设置", () => Process.Start("ms-settings:display-hdr"));
+                    hdrSettingsItem.Icon = new FontIcon
+                    {
+                        Glyph = "\uE713"
+                    };
+                    flyout.Items.Add(hdrSettingsItem);
+                    var hdrCalibItem = trayManager.CreateMenuFlyoutItem("HDR 显示器校准", () => Process.Start("ms-settings:colorcalibration"));
+                    hdrCalibItem.Icon = new FontIcon
+                    {
+                        Glyph = "\uE82F"
+                    };
+                    flyout.Items.Add(hdrCalibItem);
+                    flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
+                    var exitItem = trayManager.CreateMenuFlyoutItem("退出", () =>
+                    {
+                        try { notifyIcon.Visible = false; notifyIcon.Dispose(); } catch { }
+                        try { window.Close(); } catch { }
+                        try { Application.Exit(); } catch { }
+                    });
+                    exitItem.Icon = new FontIcon
+                    {
+                        Glyph = "\uF3B1"
+                    };
+                    flyout.Items.Add(exitItem);
+
+                    trayManager.ShowFlyoutAtCursor(flyout);
+                }
+                else if (e.Button == MouseButtons.Left)
+                {
+                    showWindow();
+                }
             };
 
             Application.Run(window);

@@ -13,7 +13,22 @@
 	<MileXamlNoSunValleyXamlStyle>true</MileXamlNoSunValleyXamlStyle>
 	<ApplicationIcon>icon.ico</ApplicationIcon>
 	<ApplicationManifest>App.manifest</ApplicationManifest>
+	<AssemblyTitle>DisplayInfo</AssemblyTitle>
   </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <PreferNativeArm64>True</PreferNativeArm64>
+    <Prefer32Bit>False</Prefer32Bit>
+  </PropertyGroup>
+
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <PreferNativeArm64>True</PreferNativeArm64>
+    <Prefer32Bit>False</Prefer32Bit>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <AdditionalFiles Remove="app1.manifest" />
+  </ItemGroup>
 
   <ItemGroup>
     <Content Include="icon.ico" />

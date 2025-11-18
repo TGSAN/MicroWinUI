@@ -29,7 +29,10 @@ namespace MicroWinUICore
 
         // Lazily created styles to keep Program.cs clean
         private Style _presenterStyle;
-        private Style _itemCornerStyle;
+        private Style _menuFlyoutItemStyle;
+        private Style _toggleMenuFlyoutItemStyle;
+        private Style _menuFlyoutSubItemStyle;
+        private Style _menuFlyoutSeparatorStyle;
 
         public TrayFlyoutManager(IslandWindow mainWindow, NotifyIcon notifyIcon)
         {
@@ -49,17 +52,58 @@ namespace MicroWinUICore
         }
 
         /// <summary>
-        /// Provide a pre-styled MenuFlyoutItem with click handler.
+        /// Provide a pre-styled MenuFlyoutItem.
         /// </summary>
-        public MenuFlyoutItem CreateItem(string text, Action onClick)
+        /// 
+        public MenuFlyoutItem CreateMenuFlyoutItem(string text, Action onClick)
         {
             EnsureStyles();
             var item = new MenuFlyoutItem { Text = text ?? string.Empty };
-            try { if (_itemCornerStyle != null) item.Style = _itemCornerStyle; } catch (Exception ex) { Debug.WriteLine("Item style apply failed: " + ex.Message); }
+            try { if (_menuFlyoutItemStyle != null) item.Style = _menuFlyoutItemStyle; } catch (Exception ex) { Debug.WriteLine("MenuFlyoutItem style apply failed: " + ex.Message); }
             if (onClick != null)
             {
                 item.Click += (s, e) => { try { onClick(); } catch { } };
             }
+            return item;
+        }
+
+        /// <summary>
+        /// Provide a pre-styled ToggleMenuFlyoutItem.
+        /// </summary>
+        /// 
+        public ToggleMenuFlyoutItem CreateToggleMenuFlyoutItem(string text, Action onClick)
+        {
+            EnsureStyles();
+            var item = new ToggleMenuFlyoutItem { Text = text ?? string.Empty };
+            try { if (_toggleMenuFlyoutItemStyle != null) item.Style = _toggleMenuFlyoutItemStyle; } catch (Exception ex) { Debug.WriteLine("ToggleMenuFlyoutItem style apply failed: " + ex.Message); }
+            if (onClick != null)
+            {
+                item.Click += (s, e) => { try { onClick(); } catch { } };
+            }
+            return item;
+        }
+
+        /// <summary>
+        /// Provide a pre-styled MenuFlyoutSubItem.
+        /// </summary>
+        /// 
+        public MenuFlyoutSubItem CreateMenuFlyoutSubItem(string text)
+        {
+            EnsureStyles();
+            var item = new MenuFlyoutSubItem { Text = text ?? string.Empty };
+            try { if (_menuFlyoutSubItemStyle != null) item.Style = _menuFlyoutSubItemStyle; } catch (Exception ex) { Debug.WriteLine("MenuFlyoutSubItem style apply failed: " + ex.Message); }
+            return item;
+        }
+
+        /// <summary>
+        /// Provide a pre-styled MenuFlyoutSeparator.
+        /// </summary>
+        /// 
+        public MenuFlyoutSeparator CreateMenuFlyoutSeparator()
+        {
+            EnsureStyles();
+            var item = new MenuFlyoutSeparator();
+            try { if (_menuFlyoutSeparatorStyle != null) item.Style = _menuFlyoutSeparatorStyle; } catch (Exception ex) { Debug.WriteLine("MenuFlyoutSeparator style apply failed: " + ex.Message); }
             return item;
         }
 
@@ -121,18 +165,62 @@ namespace MicroWinUICore
                 }
             }
 
-            if (_itemCornerStyle == null)
+            if (_menuFlyoutItemStyle == null)
             {
                 try
                 {
-                    _itemCornerStyle = new Style(typeof(MenuFlyoutItem));
-                    _itemCornerStyle.Setters.Add(new Setter(MenuFlyoutItem.CornerRadiusProperty, new CornerRadius(6)));
-                    _itemCornerStyle.Setters.Add(new Setter(MenuFlyoutItem.PaddingProperty, new Thickness(0)));
-                    _itemCornerStyle.Setters.Add(new Setter(MenuFlyoutItem.MarginProperty, new Thickness(0)));
+                    _menuFlyoutItemStyle = new Style(typeof(MenuFlyoutItem));
+                    _menuFlyoutItemStyle.Setters.Add(new Setter(MenuFlyoutItem.CornerRadiusProperty, new CornerRadius(6)));
+                    _menuFlyoutItemStyle.Setters.Add(new Setter(MenuFlyoutItem.PaddingProperty, new Thickness(0)));
+                    _menuFlyoutItemStyle.Setters.Add(new Setter(MenuFlyoutItem.MarginProperty, new Thickness(0)));
                 }
                 catch (Exception ex)
                 {
-                    Debug.WriteLine("Item corner style creation failed: " + ex.Message);
+                    Debug.WriteLine("MenuFlyoutItem style creation failed: " + ex.Message);
+                }
+            }
+
+            if (_toggleMenuFlyoutItemStyle == null)
+            {
+                try
+                {
+                    _toggleMenuFlyoutItemStyle = new Style(typeof(ToggleMenuFlyoutItem));
+                    _toggleMenuFlyoutItemStyle.Setters.Add(new Setter(ToggleMenuFlyoutItem.CornerRadiusProperty, new CornerRadius(6)));
+                    _toggleMenuFlyoutItemStyle.Setters.Add(new Setter(ToggleMenuFlyoutItem.PaddingProperty, new Thickness(0)));
+                    _toggleMenuFlyoutItemStyle.Setters.Add(new Setter(ToggleMenuFlyoutItem.MarginProperty, new Thickness(0)));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("ToggleMenuFlyoutItem style creation failed: " + ex.Message);
+                }
+            }
+
+            if (_menuFlyoutSubItemStyle == null)
+            {
+                try
+                {
+                    _menuFlyoutSubItemStyle = new Style(typeof(MenuFlyoutSubItem));
+                    _menuFlyoutSubItemStyle.Setters.Add(new Setter(MenuFlyoutSubItem.CornerRadiusProperty, new CornerRadius(6)));
+                    _menuFlyoutSubItemStyle.Setters.Add(new Setter(MenuFlyoutSubItem.PaddingProperty, new Thickness(0)));
+                    _menuFlyoutSubItemStyle.Setters.Add(new Setter(MenuFlyoutSubItem.MarginProperty, new Thickness(0)));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("MenuFlyoutSubItem style creation failed: " + ex.Message);
+                }
+            }
+
+            if (_menuFlyoutSeparatorStyle == null)
+            {
+                try
+                {
+                    _menuFlyoutSeparatorStyle = new Style(typeof(MenuFlyoutSeparator));
+                    _menuFlyoutSeparatorStyle.Setters.Add(new Setter(MenuFlyoutSeparator.BackgroundProperty, new SolidColorBrush(Color.FromArgb(0x10, 0x00, 0x00, 0x00))));
+                    _menuFlyoutSeparatorStyle.Setters.Add(new Setter(MenuFlyoutSeparator.PaddingProperty, new Thickness(0, 4, 0, 4)));
+                }
+                catch (Exception ex)
+                {
+                    Debug.WriteLine("MenuFlyoutSeparator style creation failed: " + ex.Message);
                 }
             }
         }

@@ -41,7 +41,7 @@ namespace MicroWinUI
         Slider sdrBoostSlider;
         bool sdrBoostSliderDraging = false;
         CheckBox laptopPreciseKeepHDRBrightnessModeCheckbox;
-        ToggleSwitch laptopKeepHDRBrightnessModeToggleSwitch;
+        public ToggleSwitch laptopKeepHDRBrightnessModeToggleSwitch;
         string sdrDemoPath = Environment.GetFolderPath(Environment.SpecialFolder.Windows) + @"\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\SDRSample.mkv";
         string hdrDemoPath = Environment.GetFolderPath(Environment.SpecialFolder.Windows) + @"\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\HDRSample.mkv";
         MediaPlayerElement sdrDemoPlayer;
