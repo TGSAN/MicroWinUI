@@ -2,9 +2,11 @@
 using System;
 using System.Diagnostics;
 using System.IO.Ports;
+using System.Reflection.Emit;
 using System.Text;
 using System.Windows.Forms;
 using Windows.UI.Xaml.Controls;
+using Windows.UI.Xaml.Media;
 
 namespace MicroWinUICore
 {
@@ -52,11 +54,11 @@ namespace MicroWinUICore
 
             App app = new();
 
-            IslandWindow window = new ();
-            CodePage page = new (window);
+            IslandWindow window = new();
+            CodePage page = new(window);
             window.Content = page;
-            window.ClientSize = new (1280, 720);
-            window.MinimumSize = new (480, 480);
+            window.ClientSize = new(1280, 720);
+            window.MinimumSize = new(480, 480);
             window.Text = "DisplayInfo";
 
             var notifyIcon = new NotifyIcon
@@ -98,7 +100,8 @@ namespace MicroWinUICore
 
             if (SettingHide)
             {
-                window.Load += (object sender, EventArgs e) => {
+                window.Load += (object sender, EventArgs e) =>
+                {
                     window.BeginInvoke(new Action(() =>
                     {
                         hideWindow();
@@ -115,9 +118,9 @@ namespace MicroWinUICore
                 page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn = true;
             }
 
-            using TrayFlyoutManager trayManager = new (window, notifyIcon);
+            using TrayFlyoutManager trayManager = new(window, notifyIcon);
 
-            notifyIcon.MouseClick += (s, e) =>
+            notifyIcon.MouseClick += async (s, e) =>
             {
                 if (e.Button == MouseButtons.Right)
                 {
@@ -148,18 +151,51 @@ namespace MicroWinUICore
                         flyout.Items.Add(showItem);
                     }
                     flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
-                    var laptopKeepHDRBrightnessModeToggleItem = trayManager.CreateMenuFlyoutItem("保持 HDR 亮度模式", () =>
+                    var laptopKeepHDRBrightnessModeToggleItem = trayManager.CreateMenuFlyoutItem("自动保持 HDR 亮度内容", () =>
                     {
                         page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn = !page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn;
                     });
                     laptopKeepHDRBrightnessModeToggleItem.Icon = new FontIcon
                     {
-                        Glyph = page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn ? "\uE73A" : "\uE739"
+                        Glyph = page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn ? "\uE73D" : "\uE739"
                     };
-                    laptopKeepHDRBrightnessModeToggleItem.IsEnabled = page.laptopKeepHDRBrightnessModeToggleSwitch.IsEnabled;
+                    if (!page.laptopKeepHDRBrightnessModeToggleSwitch.IsEnabled)
+                    {
+                        laptopKeepHDRBrightnessModeToggleItem.IsEnabled = false;
+                        laptopKeepHDRBrightnessModeToggleItem.Text += " (不支持)";
+                    }
                     flyout.Items.Add(laptopKeepHDRBrightnessModeToggleItem);
+                    var preciseBrightnessPairSubItem = trayManager.CreateMenuFlyoutSubItem("精准 SDR 内容亮度");
+                    if (!page.IsBrightnessNitsControlSupportedForCurrentMonitor)
+                    {
+                        preciseBrightnessPairSubItem.IsEnabled = false;
+                        preciseBrightnessPairSubItem.Text += " (不支持)";
+                    }
+                    else
+                    { 
+                        var pairs = await page.GetLaptopPreciseKeepHDRBrightnessLevelNitsPair();
+                        if (pairs.Length > 0)
+                        {
+                            foreach (var pair in pairs)
+                            {
+                                var level = pair.Key;
+                                var brightness = pair.Value;
+                                var item = trayManager.CreateMenuFlyoutItem($"亮度 {Math.Round(level * 100)} ({brightness} 尼特)", () =>
+                                {
+                                    page.SetNitsSync(brightness);
+                                });
+                                preciseBrightnessPairSubItem.Items.Add(item);
+                            }
+                        }
+                        else
+                        {
+                            var item = trayManager.CreateMenuFlyoutItem($"没有可用的亮度", () => {});
+                            item.IsEnabled = false;
+                            preciseBrightnessPairSubItem.Items.Add(item);
+                        }
+                    }
+                    flyout.Items.Add(preciseBrightnessPairSubItem);
                     flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
-                    // 全部校色文件重载 (CLSID 触发)
                     var reloadAllCalibItem = trayManager.CreateMenuFlyoutItem("重新加载显示器校色", () =>
                     {
                         bool okAll = Win32API.TryReloadAllCalibrationViaClsid();
@@ -168,7 +204,8 @@ namespace MicroWinUICore
                         //    notifyIcon.ShowBalloonTip(1500, okAll ? "已重新加载" : "重新加载失败", okAll ? "显示器校色重新加载成功" : "无法重新加载显示器校色", okAll ? ToolTipIcon.None : ToolTipIcon.Error);
                         //}
                     });
-                    reloadAllCalibItem.Icon = new FontIcon { 
+                    reloadAllCalibItem.Icon = new FontIcon
+                    {
                         Glyph = "\uE895"
                     }; flyout.Items.Add(reloadAllCalibItem);
                     flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
