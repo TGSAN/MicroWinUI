@@ -159,13 +159,26 @@ namespace MicroWinUICore
                     laptopKeepHDRBrightnessModeToggleItem.IsEnabled = page.laptopKeepHDRBrightnessModeToggleSwitch.IsEnabled;
                     flyout.Items.Add(laptopKeepHDRBrightnessModeToggleItem);
                     flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
+                    // 全部校色文件重载 (CLSID 触发)
+                    var reloadAllCalibItem = trayManager.CreateMenuFlyoutItem("重新加载显示器校色", () =>
+                    {
+                        bool okAll = Win32API.TryReloadAllCalibrationViaClsid();
+                        //if (!SettingDisableNotify)
+                        //{
+                        //    notifyIcon.ShowBalloonTip(1500, okAll ? "已重新加载" : "重新加载失败", okAll ? "显示器校色重新加载成功" : "无法重新加载显示器校色", okAll ? ToolTipIcon.None : ToolTipIcon.Error);
+                        //}
+                    });
+                    reloadAllCalibItem.Icon = new FontIcon { 
+                        Glyph = "\uE895"
+                    }; flyout.Items.Add(reloadAllCalibItem);
+                    flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
                     var hdrSettingsItem = trayManager.CreateMenuFlyoutItem("HDR 设置", () => Process.Start("ms-settings:display-hdr"));
                     hdrSettingsItem.Icon = new FontIcon
                     {
                         Glyph = "\uE713"
                     };
                     flyout.Items.Add(hdrSettingsItem);
-                    var hdrCalibItem = trayManager.CreateMenuFlyoutItem("HDR 显示器校准", () => Process.Start("ms-settings:colorcalibration"));
+                    var hdrCalibItem = trayManager.CreateMenuFlyoutItem("HDR 显示器校准", () => Process.Start("ms-windows-store://pdp?productId=9N7F2SM5D1LR&mode=mini"));
                     hdrCalibItem.Icon = new FontIcon
                     {
                         Glyph = "\uE82F"

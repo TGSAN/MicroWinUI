@@ -418,6 +418,23 @@ namespace MicroWinUICore
             catch { }
             return false;
         }
-        // ===============================================================
+
+        /// <summary>全部校色重新加载</summary>
+        public static bool TryReloadAllCalibrationViaClsid()
+        {
+            try
+            {
+                Guid clsid = new Guid("B210D694-C8DF-490D-9576-9E20CDBC20BD");
+                Type t = Type.GetTypeFromCLSID(clsid, true);
+                object comObj = Activator.CreateInstance(t); // 侧效：构造触发系统刷新
+                if (comObj != null)
+                {
+                    try { Marshal.ReleaseComObject(comObj); } catch { }
+                    return true;
+                }
+            }
+            catch { }
+            return false;
+        }
     }
 }
