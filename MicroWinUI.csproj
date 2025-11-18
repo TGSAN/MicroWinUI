@@ -11,7 +11,7 @@
     <SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
     <PlatformTarget>AnyCPU</PlatformTarget>
 	<MileXamlNoSunValleyXamlStyle>true</MileXamlNoSunValleyXamlStyle>
-	<ApplicationIcon>icon.ico</ApplicationIcon>
+	<ApplicationIcon>icon_min.ico</ApplicationIcon>
 	<ApplicationManifest>App.manifest</ApplicationManifest>
 	<AssemblyTitle>DisplayInfo</AssemblyTitle>
   </PropertyGroup>
@@ -27,7 +27,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Content Include="icon.ico" />
+    <Content Include="icon_min.ico" />
   </ItemGroup>
   
   <ItemGroup>
