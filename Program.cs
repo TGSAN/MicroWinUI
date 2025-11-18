@@ -7,6 +7,7 @@ using System.Text;
 using System.Windows.Forms;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
+using System.Threading;
 
 namespace MicroWinUICore
 {
@@ -17,6 +18,7 @@ namespace MicroWinUICore
         static bool SettingDisableNotify = false;
         public static Action ShowWindow;
         public static Action HideWindow;
+        private static Mutex _singleInstanceMutex; // Ensure single process instance
 
         [STAThread]
         static void Main(string[] args)
@@ -25,6 +27,17 @@ namespace MicroWinUICore
 
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            {
+                // Single instance guard
+                _singleInstanceMutex = new Mutex(initiallyOwned: true, name: "Global\\MicroWinUI.DisplayInfo", createdNew: out var createdNew);
+                if (!createdNew)
+                {
+                    // Another instance is already running, exit silently
+                    MessageBox.Show("DisplayInfo 已经在运行中。", "信息", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    return;
+                }
+            }
 
             foreach (string arg in args)
             {
@@ -247,6 +260,13 @@ namespace MicroWinUICore
             Application.Run(window);
 
             app.Close();
+
+            try
+            {
+                _singleInstanceMutex.ReleaseMutex();
+                _singleInstanceMutex.Dispose();
+            }
+            catch { }
         }
     }
 }
