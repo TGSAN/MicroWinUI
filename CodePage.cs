@@ -1,25 +1,26 @@
 ﻿using MicroWinUICore;
+using Mile.Xaml.Interop;
 using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.Text;
-using System.Collections.Generic;
+using System.Threading; // for ConcurrentDictionary
 using System.Threading.Tasks;
 using Windows.Devices.Display;
 using Windows.Devices.Enumeration;
+using Windows.Foundation; // for Size
 using Windows.Foundation.Metadata;
 using Windows.Graphics.Display;
 using Windows.Media.Core;
+using Windows.Media.Playback;
+using Windows.UI; // for Color fallback
 using Windows.UI.Core;
+using Windows.UI.ViewManagement; // for UISettings
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
-using Mile.Xaml.Interop;
-using Windows.Foundation; // for Size
 using Windows.UI.Xaml.Media; // for Brush
-using Windows.UI; // for Color fallback
-using Windows.UI.ViewManagement; // for UISettings
-using System.Collections.Concurrent;
-using System.Threading; // for ConcurrentDictionary
 
 namespace MicroWinUI
 {
@@ -55,6 +56,8 @@ namespace MicroWinUI
 
         public CodePage(IslandWindow coreWindowHost)
         {
+            this.NavigationCacheMode = Windows.UI.Xaml.Navigation.NavigationCacheMode.Disabled;
+
             this.coreWindowHost = coreWindowHost;
             this.coreWindowHost.coreWindowHWND = this.coreWindow.GetInterop().GetWindowHandle();
 
@@ -229,12 +232,9 @@ namespace MicroWinUI
                 sdrDemoPlayer = new MediaPlayerElement
                 {
                     AutoPlay = true,
-                    AreTransportControlsEnabled = false,
-                    Source = MediaSource.CreateFromUri(new Uri(sdrDemoPath))
+                    AreTransportControlsEnabled = false
                 };
-                sdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
-                sdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
-                sdrDemoPlayer.MediaPlayer.IsMuted = true;
+                sdrDemoPlayer.SetMediaPlayer(null);
                 sdrDemoPlayer.Width = 192;
                 sdrDemoPlayer.Height = 108;
                 sdrDemoPlayer.Margin = new Thickness(0, 0, 16, 0);
@@ -254,12 +254,9 @@ namespace MicroWinUI
                 hdrDemoPlayer = new MediaPlayerElement
                 {
                     AutoPlay = true,
-                    AreTransportControlsEnabled = false,
-                    Source = MediaSource.CreateFromUri(new Uri(hdrDemoPath))
+                    AreTransportControlsEnabled = false
                 };
-                hdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
-                hdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
-                hdrDemoPlayer.MediaPlayer.IsMuted = true;
+                hdrDemoPlayer.SetMediaPlayer(null);
                 hdrDemoPlayer.Width = 192;
                 hdrDemoPlayer.Height = 108;
                 hdrStackPanel.Children.Add(hdrDemoPlayer);
@@ -273,6 +270,9 @@ namespace MicroWinUI
                     VerticalAlignment = VerticalAlignment.Center
                 });
                 sdrHdrStackPanel.Children.Add(hdrStackPanel);
+
+                VideoStart();
+
                 rightPanel.Children.Add(sdrHdrStackPanel);
 
                 laptopKeepHDRBrightnessModeToggleSwitch = new ToggleSwitch
@@ -327,13 +327,52 @@ namespace MicroWinUI
             InvalidateArrange();
             coreWindowHost.Backdrop = IslandWindow.SystemBackdrop.Tabbed;
             UpdateDisplayInfo();
-            mainStackPanel.Loaded += MainStackPanel_Loaded;
             this.SizeChanged += CodePage_SizeChanged;
             this.Loaded += CodePage_Loaded;
             this.Unloaded += CodePage_Unloaded;
             UpdateResponsiveLayout();
             // Init WMI brightness watcher for current window's monitor
             InitializeWmiBrightnessWatcher();
+        }
+
+        public void VideoStop()
+        {
+            sdrDemoPlayer.Source = null;
+            sdrDemoPlayer.SetMediaPlayer(null);
+            hdrDemoPlayer.Source = null;
+            hdrDemoPlayer.SetMediaPlayer(null);
+        }
+
+        public void VideoStart()
+        {
+            sdrDemoPlayer.SetMediaPlayer(new MediaPlayer());
+            sdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
+            sdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
+            sdrDemoPlayer.MediaPlayer.IsMuted = true;
+            sdrDemoPlayer.Source = MediaSource.CreateFromUri(new Uri(sdrDemoPath));
+
+            hdrDemoPlayer.SetMediaPlayer(new MediaPlayer());
+            hdrDemoPlayer.MediaPlayer.SystemMediaTransportControls.IsEnabled = false;
+            hdrDemoPlayer.MediaPlayer.IsLoopingEnabled = true;
+            hdrDemoPlayer.MediaPlayer.IsMuted = true;
+            hdrDemoPlayer.Source = MediaSource.CreateFromUri(new Uri(hdrDemoPath));
+
+            // Start Play
+            sdrDemoPlayer.MediaPlayer.Play();
+            hdrDemoPlayer.MediaPlayer.Play();
+            hdrDemoPlayer.MediaPlayer.PlaybackSession.SeekCompleted += (s, ev) =>
+            {
+                _ = this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
+                () =>
+                {
+                    Debug.WriteLine("SeekCompleted sync position");
+                    hdrDemoPlayer.MediaPlayer.Pause();
+                    sdrDemoPlayer.MediaPlayer.Pause();
+                    sdrDemoPlayer.MediaPlayer.PlaybackSession.Position = hdrDemoPlayer.MediaPlayer.PlaybackSession.Position;
+                    hdrDemoPlayer.MediaPlayer.Play();
+                    sdrDemoPlayer.MediaPlayer.Play();
+                });
+            };
         }
 
         private void HDRBrightnessSyncBySystemBrightness(float nits)
@@ -645,29 +684,6 @@ namespace MicroWinUI
         public double GetValueAtRatio(double start, double end, double ratio)
         {
             return start + (end - start) * ratio;
-        }
-
-        private async void MainStackPanel_Loaded(object sender, RoutedEventArgs e)
-        {
-            if (sdrDemoPlayer != null && hdrDemoPlayer != null)
-            {
-                sdrDemoPlayer.MediaPlayer.Play();
-                hdrDemoPlayer.MediaPlayer.Play();
-                hdrDemoPlayer.MediaPlayer.PlaybackSession.SeekCompleted += (s, ev) =>
-                {
-                    _ = this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal,
-                    () =>
-                    {
-                        Debug.WriteLine("SeekCompleted sync position");
-                        hdrDemoPlayer.MediaPlayer.Pause();
-                        sdrDemoPlayer.MediaPlayer.Pause();
-                        sdrDemoPlayer.MediaPlayer.PlaybackSession.Position = hdrDemoPlayer.MediaPlayer.PlaybackSession.Position;
-                        hdrDemoPlayer.MediaPlayer.Play();
-                        sdrDemoPlayer.MediaPlayer.Play();
-                    });
-                };
-            }
-
         }
 
         private async void UpdateDisplayInfo()

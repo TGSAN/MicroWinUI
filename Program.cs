@@ -32,6 +32,9 @@ namespace MicroWinUICore
 
             var showWindow = () =>
             {
+                page.VideoStart();
+                page.Visibility = Windows.UI.Xaml.Visibility.Visible; // 恢复渲染
+                window.Content = page;
                 window.Show();
                 Win32API.ShowWindow(window.Handle, Win32API.SW_RESTORE);
                 window.Activate();
@@ -40,7 +43,10 @@ namespace MicroWinUICore
             var hideWindow = () =>
             {
                 Win32API.ShowWindow(window.Handle, Win32API.SW_RESTORE); // 防止恢复的时候处于最小化状态找不到
+                window.Content = null;
                 window.Hide();
+                page.VideoStop();
+                page.Visibility = Windows.UI.Xaml.Visibility.Collapsed; // 停止渲染，节省资源
                 notifyIcon.BalloonTipTitle = "正在后台继续运行";
                 notifyIcon.BalloonTipText = "已最小化至系统托盘，可通过点击托盘图标或通知显示主界面";
                 notifyIcon.BalloonTipClicked += (s, e) =>
@@ -48,6 +54,9 @@ namespace MicroWinUICore
                     showWindow();
                 };
                 notifyIcon.ShowBalloonTip(2500);
+                GC.Collect();
+                GC.WaitForPendingFinalizers();
+                GC.Collect();
             };
 
             using TrayFlyoutManager trayManager = new (window, notifyIcon);
