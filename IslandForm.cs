@@ -5,10 +5,7 @@ using System.Drawing;
 using System.Runtime.InteropServices;
 using Windows.UI.Xaml;
 using Windows.UI.ViewManagement;
-using System.Xml.Linq;
-using System.Runtime;
 using Microsoft.Win32;
-using Windows.UI.Core;
 
 namespace MicroWinUICore
 {
@@ -88,6 +85,12 @@ namespace MicroWinUICore
             this.Activated += IslandWindow_Activated;
             this.Resize += IslandWindow_Resize;
             this.Move += IslandWindow_Move;
+
+            Icon extractedIcon = Icon.ExtractAssociatedIcon(this.GetType().Assembly.Location);
+            if (extractedIcon != null)
+            {
+                this.Icon = extractedIcon; // 设置窗体图标
+            }
         }
 
         private void XamlHost_SizeChanged(object sender, EventArgs e)
@@ -237,7 +240,8 @@ namespace MicroWinUICore
             int _blurBackgroundColor = 0xFFFFFF; /* Drak BGR color format */
             // int _blurBackgroundColor = 0xE6E6E6; /* Drak BGR color format */
 
-            var accent = new Win32API.AccentPolicy {
+            var accent = new Win32API.AccentPolicy
+            {
                 AccentState = Win32API.AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT,
                 GradientColor = (_blurOpacity << 24) | (_blurBackgroundColor & 0xFFFFFF)
             };

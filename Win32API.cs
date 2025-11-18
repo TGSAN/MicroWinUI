@@ -6,6 +6,9 @@ namespace MicroWinUICore
     internal class Win32API
     {
         [DllImport("user32.dll")]
+        public static extern IntPtr SendMessage(IntPtr hWnd, UInt32 Msg, IntPtr wParam, IntPtr lParam);
+
+        [DllImport("user32.dll")]
         public static extern int SetWindowCompositionAttribute(IntPtr hwnd, ref WindowCompositionAttributeData data);
 
         [DllImport("dwmapi.dll", SetLastError = false, ExactSpelling = true)]

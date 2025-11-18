@@ -6,13 +6,18 @@
     <TargetPlatformVersion>10.0.26100.0</TargetPlatformVersion>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <LangVersion>latest</LangVersion>
-    <ApplicationManifest>App.manifest</ApplicationManifest>
     <UseWindowsForms>true</UseWindowsForms>
     <!-- Add workaround for WinRT support in the old .NET SDK -->
     <SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
     <PlatformTarget>AnyCPU</PlatformTarget>
 	<MileXamlNoSunValleyXamlStyle>true</MileXamlNoSunValleyXamlStyle>
+	<ApplicationIcon>icon.ico</ApplicationIcon>
+	<ApplicationManifest>App.manifest</ApplicationManifest>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="icon.ico" />
+  </ItemGroup>
   
   <ItemGroup>
     <PackageReference Include="Costura.Fody" Version="3.3.3">
