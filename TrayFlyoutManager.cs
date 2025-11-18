@@ -1,15 +1,13 @@
 using System;
 using System.Diagnostics;
-using System.Runtime.InteropServices;
 using System.Windows.Forms;
 using Windows.Foundation;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Core; // for dispatcher
 using Windows.UI.Xaml; // Style, CornerRadius, Thickness
 using Windows.UI.Xaml.Media; // Brush, AcrylicBrush, SolidColorBrush
 using Windows.UI; // Color
-using Windows.UI.ViewManagement; // UISettings
+using Windows.UI.ViewManagement;
 
 namespace MicroWinUICore
 {
@@ -123,7 +121,7 @@ namespace MicroWinUICore
                 ShowInTaskbar = false,
                 StartPosition = FormStartPosition.Manual,
                 Location = cursor,
-                ClientSize = new System.Drawing.Size(300, 200), // give room for flyout hit-test
+                ClientSize = new System.Drawing.Size(0, 0), // give room for flyout hit-test
                 TopMost = true,
                 Text = string.Empty
             };
@@ -141,28 +139,31 @@ namespace MicroWinUICore
             var options = new FlyoutShowOptions
             {
                 Placement = FlyoutPlacementMode.Bottom,
-                Position = new Point(0, 0)
+                Position = new Point(0, 0),
+                ShowMode = FlyoutShowMode.Standard
             };
             _activeFlyout.ShowAt(_anchorPage, options);
         }
 
         private void EnsureStyles()
         {
-            if (_presenterStyle == null)
+            var ui = new UISettings();
+            var isDark = _mainWindow.ActualTheme == ElementTheme.Dark;
+
+            try
             {
-                try
-                {
-                    _presenterStyle = new Style(typeof(MenuFlyoutPresenter));
-                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.CornerRadiusProperty, new CornerRadius(8)));
-                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.BackgroundProperty, BuildFlyoutBackground()));
-                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.PaddingProperty, new Thickness(4, 0, 4, 0)));
-                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.BorderThicknessProperty, new Thickness(0.5)));
-                    _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.MarginProperty, new Thickness(0)));
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine("Presenter style creation failed: " + ex.Message);
-                }
+                _presenterStyle = new Style(typeof(MenuFlyoutPresenter));
+                _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.IsDefaultShadowEnabledProperty, false));
+                _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.CornerRadiusProperty, new CornerRadius(8)));
+                _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.BackgroundProperty, BuildFlyoutBackground()));
+                _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.PaddingProperty, new Thickness(4, 0, 4, 0)));
+                _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.BorderThicknessProperty, new Thickness(1)));
+                _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.BorderBrushProperty, isDark ? new SolidColorBrush(Color.FromArgb(0x40, 0x00, 0x00, 0x00)) : new SolidColorBrush(Color.FromArgb(0x10, 0x00, 0x00, 0x00))));
+                _presenterStyle.Setters.Add(new Setter(MenuFlyoutPresenter.MarginProperty, new Thickness(0)));
+            }
+            catch (Exception ex)
+            {
+                Debug.WriteLine("Presenter style creation failed: " + ex.Message);
             }
 
             if (_menuFlyoutItemStyle == null)
@@ -232,7 +233,7 @@ namespace MicroWinUICore
             {
                 var ui = new UISettings();
                 var isDark = _mainWindow.ActualTheme == ElementTheme.Dark;
-                var tint = isDark ? Color.FromArgb(0xD0, 0x00, 0x00, 0x00) : Color.FromArgb(0xD0, 0xFF, 0xFF, 0xFF);
+                var tint = isDark ? Color.FromArgb(0xFF, 0x2C, 0x2C, 0x2C) : Color.FromArgb(0xFF, 0xF9, 0xF9, 0xF9);
                 var fallback = isDark ? Color.FromArgb(0xE6, 0x22, 0x22, 0x22) : Color.FromArgb(0xE6, 0xFF, 0xFF, 0xFF);
 
                 bool effectsEnabled = true;
@@ -246,7 +247,8 @@ namespace MicroWinUICore
                 {
                     BackgroundSource = AcrylicBackgroundSource.Backdrop,
                     TintColor = tint,
-                    TintOpacity = 1,
+                    TintOpacity = 0,
+                    TintLuminosityOpacity = 0.85,
                     FallbackColor = fallback
                 };
                 return acrylic;
