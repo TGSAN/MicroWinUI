@@ -373,7 +373,7 @@ namespace MicroWinUI
                         {
                             var dialog = new ContentDialog
                             {
-                                Title = "是否要推出？",
+                                Title = "是否要退出？",
                                 Content = "退出程序还是最小化到托盘以便后台运行",
                                 PrimaryButtonText = "退出程序",
                                 SecondaryButtonText = "最小化到托盘",
@@ -381,6 +381,9 @@ namespace MicroWinUI
                                 DefaultButton = ContentDialogButton.Close,
                                 XamlRoot = this.XamlRoot
                             };
+
+                            ApplyRoundedContentDialog(dialog); // 应用圆角
+
                             var result = await dialog.ShowAsync();
                             if (result == ContentDialogResult.Primary)
                             {
@@ -390,10 +393,6 @@ namespace MicroWinUI
                             else if (result == ContentDialogResult.Secondary)
                             {
                                 Program.HideWindow();
-                            }
-                            else
-                            {
-                                // 取消：什么都不做
                             }
                         }
                         catch (Exception ex)
@@ -407,6 +406,51 @@ namespace MicroWinUI
             {
                 Debug.WriteLine($"FormClosing handler error: {ex}");
             }
+        }
+
+        private void ApplyRoundedContentDialog(ContentDialog dialog)
+        {
+            dialog.Loaded += (s, e) =>
+            {
+                try
+                {
+                    // 背景圆角
+                    var bg = FindChildByName<Border>(dialog, "BackgroundElement");
+                    if (bg != null) bg.CornerRadius = new CornerRadius(8);
+                    // 按钮圆角（默认/聚焦状态会使用模板内部 Border）
+                    RoundButton("PrimaryButton", dialog);
+                    RoundButton("SecondaryButton", dialog);
+                    RoundButton("CloseButton", dialog);
+                }
+                catch { }
+            };
+        }
+
+        private void RoundButton(string name, ContentDialog dialog)
+        {
+            var btn = FindChildByName<Button>(dialog, name);
+            if (btn != null)
+            {
+                btn.CornerRadius = new CornerRadius(4);
+                btn.BorderThickness = new Thickness(1);
+                btn.Margin = new Thickness(4, 0, right: 4, 0);
+                var inner = FindChildByName<Border>(btn, "BackgroundElement");
+                if (inner != null) inner.CornerRadius = new CornerRadius(4);
+            }
+        }
+
+        private T FindChildByName<T>(DependencyObject parent, string name) where T : FrameworkElement
+        {
+            if (parent == null) return null;
+            int count = VisualTreeHelper.GetChildrenCount(parent);
+            for (int i = 0; i < count; i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T fe && fe.Name == name) return fe;
+                var result = FindChildByName<T>(child, name);
+                if (result != null) return result;
+            }
+            return null;
         }
 
         public void VideoStop()
