@@ -17,6 +17,8 @@ namespace MicroWinUICore
         [STAThread]
         static void Main(string[] args)
         {
+            DpiAware.ConfigureDpi();
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
