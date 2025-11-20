@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 
 namespace MicroWinUICore
@@ -139,10 +140,10 @@ namespace MicroWinUICore
         public const int MONITOR_DEFAULTTONEAREST = 0x00000002;
 
         [DllImport("user32.dll")]
-        private static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
+        public static extern IntPtr MonitorFromWindow(IntPtr hwnd, uint dwFlags);
 
         [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-        private struct MONITORINFOEX
+        public struct MONITORINFOEX
         {
             public int cbSize;
             public RECT rcMonitor;
@@ -153,18 +154,19 @@ namespace MicroWinUICore
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct RECT { public int left; public int top; public int right; public int bottom; }
+        public struct RECT { public int left; public int top; public int right; public int bottom; }
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode)]
-        private static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
+        public static extern bool GetMonitorInfo(IntPtr hMonitor, ref MONITORINFOEX lpmi);
 
-        private const uint QDC_ONLY_ACTIVE_PATHS = 0x00000002;
-
-        [DllImport("user32.dll")]
-        private static extern int GetDisplayConfigBufferSizes(uint flags, out uint numPathArrayElements, out uint numModeInfoArrayElements);
+        public const uint QDC_ONLY_ACTIVE_PATHS = 0x00000002;
+        public const int ERROR_SUCCESS = 0;
 
         [DllImport("user32.dll")]
-        private static extern int QueryDisplayConfig(uint flags,
+        public static extern int GetDisplayConfigBufferSizes(uint flags, out uint numPathArrayElements, out uint numModeInfoArrayElements);
+
+        [DllImport("user32.dll")]
+        public static extern int QueryDisplayConfig(uint flags,
             ref uint numPathArrayElements,
             [Out] DISPLAYCONFIG_PATH_INFO[] pathInfoArray,
             ref uint numModeInfoArrayElements,
@@ -172,61 +174,96 @@ namespace MicroWinUICore
             IntPtr currentTopologyId);
 
         [DllImport("user32.dll")]
-        private static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_SOURCE_DEVICE_NAME requestPacket);
+        public static extern int DisplayConfigSetDeviceInfo(ref DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE requestPacket);
 
         [DllImport("user32.dll")]
-        private static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_TARGET_DEVICE_NAME requestPacket);
+        public static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO requestPacket);
 
         [DllImport("user32.dll")]
-        private static extern int DisplayConfigSetDeviceInfo(IntPtr setPacket);
+        public static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_SOURCE_DEVICE_NAME requestPacket);
 
-        [StructLayout(LayoutKind.Sequential)] private struct LUID { public uint LowPart; public int HighPart; }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_PATH_SOURCE_INFO { public LUID adapterId; public uint id; public uint modeInfoIdx; public uint statusFlags; }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_RATIONAL { public uint Numerator; public uint Denominator; }
-        private enum DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY : int { UNINITIALIZED = -1 }
-        private enum DISPLAYCONFIG_ROTATION : int { IDENTITY = 1 }
-        private enum DISPLAYCONFIG_SCALING : int { IDENTITY = 1 }
-        private enum DISPLAYCONFIG_SCANLINE_ORDERING : int { UNSPECIFIED = 0 }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_PATH_TARGET_INFO { public LUID adapterId; public uint id; public uint modeInfoIdx; public DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY outputTechnology; public DISPLAYCONFIG_ROTATION rotation; public DISPLAYCONFIG_SCALING scaling; public DISPLAYCONFIG_RATIONAL refreshRate; public DISPLAYCONFIG_SCANLINE_ORDERING scanLineOrdering; [MarshalAs(UnmanagedType.Bool)] public bool targetAvailable; public uint statusFlags; }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_PATH_INFO { public DISPLAYCONFIG_PATH_SOURCE_INFO sourceInfo; public DISPLAYCONFIG_PATH_TARGET_INFO targetInfo; public uint flags; }
-        private enum DISPLAYCONFIG_DEVICE_INFO_TYPE : int { GET_SOURCE_NAME = 1, GET_TARGET_NAME = 2 }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_DEVICE_INFO_HEADER { public DISPLAYCONFIG_DEVICE_INFO_TYPE type; public int size; public LUID adapterId; public uint id; }
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct DISPLAYCONFIG_SOURCE_DEVICE_NAME { public DISPLAYCONFIG_DEVICE_INFO_HEADER header; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string viewGdiDeviceName; }
-        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] private struct DISPLAYCONFIG_TARGET_DEVICE_NAME { public DISPLAYCONFIG_DEVICE_INFO_HEADER header; public DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS flags; public DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY outputTechnology; public ushort edidManufactureId; public ushort edidProductCodeId; public uint connectorInstance; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string monitorFriendlyDeviceName; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string monitorDevicePath; }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS { public uint value; }
+        [DllImport("user32.dll")]
+        public static extern int DisplayConfigGetDeviceInfo(ref DISPLAYCONFIG_TARGET_DEVICE_NAME requestPacket);
+
+        [DllImport("user32.dll")]
+        public static extern int DisplayConfigSetDeviceInfo(IntPtr setPacket);
+
+        [StructLayout(LayoutKind.Sequential)] public struct LUID { public uint LowPart; public int HighPart; }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_PATH_SOURCE_INFO { public LUID adapterId; public uint id; public uint modeInfoIdx; public uint statusFlags; }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_RATIONAL { public uint Numerator; public uint Denominator; }
+        public enum DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY : int { UNINITIALIZED = -1 }
+        public enum DISPLAYCONFIG_ROTATION : int { IDENTITY = 1 }
+        public enum DISPLAYCONFIG_SCALING : int { IDENTITY = 1 }
+        public enum DISPLAYCONFIG_SCANLINE_ORDERING : int { UNSPECIFIED = 0 }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_PATH_TARGET_INFO { public LUID adapterId; public uint id; public uint modeInfoIdx; public DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY outputTechnology; public DISPLAYCONFIG_ROTATION rotation; public DISPLAYCONFIG_SCALING scaling; public DISPLAYCONFIG_RATIONAL refreshRate; public DISPLAYCONFIG_SCANLINE_ORDERING scanLineOrdering; [MarshalAs(UnmanagedType.Bool)] public bool targetAvailable; public uint statusFlags; }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_PATH_INFO { public DISPLAYCONFIG_PATH_SOURCE_INFO sourceInfo; public DISPLAYCONFIG_PATH_TARGET_INFO targetInfo; public uint flags; }
+        public enum DISPLAYCONFIG_DEVICE_INFO_TYPE : int { GET_SOURCE_NAME = 1, GET_TARGET_NAME = 2, GET_ADVANCED_COLOR_INFO = 9, SET_ADVANCED_COLOR_STATE = 10 }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_DEVICE_INFO_HEADER { public DISPLAYCONFIG_DEVICE_INFO_TYPE type; public int size; public LUID adapterId; public uint id; }
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct DISPLAYCONFIG_SOURCE_DEVICE_NAME { public DISPLAYCONFIG_DEVICE_INFO_HEADER header; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 32)] public string viewGdiDeviceName; }
+        [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)] public struct DISPLAYCONFIG_TARGET_DEVICE_NAME { public DISPLAYCONFIG_DEVICE_INFO_HEADER header; public DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS flags; public DISPLAYCONFIG_VIDEO_OUTPUT_TECHNOLOGY outputTechnology; public ushort edidManufactureId; public ushort edidProductCodeId; public uint connectorInstance; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 64)] public string monitorFriendlyDeviceName; [MarshalAs(UnmanagedType.ByValTStr, SizeConst = 128)] public string monitorDevicePath; }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_TARGET_DEVICE_NAME_FLAGS { public uint value; }
 
         // Mode info union required by QueryDisplayConfig (even if we don't consume contents)
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_MODE_INFO { public DISPLAYCONFIG_MODE_INFO_TYPE infoType; public uint id; public LUID adapterId; public DISPLAYCONFIG_MODE_INFO_UNION mode; }
-        private enum DISPLAYCONFIG_MODE_INFO_TYPE : uint { SOURCE = 1, TARGET = 2, DESKTOP_IMAGE = 3 }
-        [StructLayout(LayoutKind.Explicit)] private struct DISPLAYCONFIG_MODE_INFO_UNION { [FieldOffset(0)] public DISPLAYCONFIG_TARGET_MODE targetMode; [FieldOffset(0)] public DISPLAYCONFIG_SOURCE_MODE sourceMode; [FieldOffset(0)] public DISPLAYCONFIG_DESKTOP_IMAGE_INFO desktopImageInfo; }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_TARGET_MODE { public DISPLAYCONFIG_VIDEO_SIGNAL_INFO targetVideoSignalInfo; }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_SOURCE_MODE { public uint width; public uint height; public uint pixelFormat; public POINTL position; }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_DESKTOP_IMAGE_INFO { public POINTL PathSourceSize; public RECT desktopImageRegion; public RECT desktopImageClip; }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO { public ulong pixelRate; public DISPLAYCONFIG_RATIONAL hSyncFreq; public DISPLAYCONFIG_RATIONAL vSyncFreq; public DISPLAYCONFIG_2DREGION activeSize; public DISPLAYCONFIG_2DREGION totalSize; public uint videoStandard; public DISPLAYCONFIG_SCANLINE_ORDERING scanLineOrdering; }
-        [StructLayout(LayoutKind.Sequential)] private struct DISPLAYCONFIG_2DREGION { public uint cx; public uint cy; }
-        [StructLayout(LayoutKind.Sequential)] private struct POINTL { public int x; public int y; }
-
-        // ======= SDR white level interop =======
-        private const int ERROR_SUCCESS = 0;
-        private const int ERROR_INSUFFICIENT_BUFFER = 122;
-        private const int DISPLAYCONFIG_DEVICE_INFO_SET_SDR_WHITE_LEVEL_INTERNAL = unchecked((int)0xFFFFFFEE);
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_MODE_INFO { public DISPLAYCONFIG_MODE_INFO_TYPE infoType; public uint id; public LUID adapterId; public DISPLAYCONFIG_MODE_INFO_UNION mode; }
+        public enum DISPLAYCONFIG_MODE_INFO_TYPE : int { SOURCE = 1, TARGET = 2, DESKTOP_IMAGE = 3 }
+        [StructLayout(LayoutKind.Explicit)] public struct DISPLAYCONFIG_MODE_INFO_UNION { [FieldOffset(0)] public DISPLAYCONFIG_TARGET_MODE targetMode; [FieldOffset(0)] public DISPLAYCONFIG_SOURCE_MODE sourceMode; [FieldOffset(0)] public DISPLAYCONFIG_DESKTOP_IMAGE_INFO desktopImageInfo; }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_TARGET_MODE { public DISPLAYCONFIG_VIDEO_SIGNAL_INFO targetVideoSignalInfo; }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_SOURCE_MODE { public uint width; public uint height; public uint pixelFormat; public POINTL position; }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_DESKTOP_IMAGE_INFO { public POINTL PathSourceSize; public RECT desktopImageRegion; public RECT desktopImageClip; }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_VIDEO_SIGNAL_INFO { public ulong pixelRate; public DISPLAYCONFIG_RATIONAL hSyncFreq; public DISPLAYCONFIG_RATIONAL vSyncFreq; public DISPLAYCONFIG_2DREGION activeSize; public DISPLAYCONFIG_2DREGION totalSize; public uint videoStandard; public DISPLAYCONFIG_SCANLINE_ORDERING scanLineOrdering; }
+        [StructLayout(LayoutKind.Sequential)] public struct DISPLAYCONFIG_2DREGION { public uint cx; public uint cy; }
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct DISPLAYCONFIG_SDR_WHITE_LEVEL
+        public struct DISPLAYCONFIG_GET_ADVANCED_COLOR_INFO
+        {
+            public DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+            public uint value; // 这是一个位掩码 (BitField)
+            public int colorEncoding;
+            public int bitsPerColorChannel;
+
+            // 辅助属性：解析 value 中的位
+            public bool AdvancedColorSupported => (value & 0x1) == 0x1;
+            public bool AdvancedColorEnabled => (value & 0x2) == 0x2;
+        }
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE
+        {
+            public DISPLAYCONFIG_DEVICE_INFO_HEADER header;
+            public uint value; // Bit 0 = Enable/Disable
+            public int colorEncoding;
+            public int bitsPerColorChannel;
+
+            public DISPLAYCONFIG_SET_ADVANCED_COLOR_STATE(bool enable)
+            {
+                header = new DISPLAYCONFIG_DEVICE_INFO_HEADER();
+                value = enable ? 1u : 0u;
+                colorEncoding = 0;
+                bitsPerColorChannel = 0;
+            }
+        }
+
+        [StructLayout(LayoutKind.Sequential)] public struct POINTL { public int x; public int y; }
+
+        // ======= SDR white level interop =======
+        public const int ERROR_INSUFFICIENT_BUFFER = 122;
+        public const int DISPLAYCONFIG_DEVICE_INFO_SET_SDR_WHITE_LEVEL_INTERNAL = unchecked((int)0xFFFFFFEE);
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct DISPLAYCONFIG_SDR_WHITE_LEVEL
         {
             public DISPLAYCONFIG_DEVICE_INFO_HEADER header;
             public uint SDRWhiteLevel;
         }
 
         [StructLayout(LayoutKind.Sequential)]
-        private struct DISPLAYCONFIG_SET_SDR_WHITE_LEVEL
+        public struct DISPLAYCONFIG_SET_SDR_WHITE_LEVEL
         {
             public DISPLAYCONFIG_DEVICE_INFO_HEADER header;
             public uint SDRWhiteLevel;
             public byte finalValue;
         }
 
-        private static int SetDeviceInfo<T>(ref T packet) where T : struct
+        public static int SetDeviceInfo<T>(ref T packet) where T : struct
         {
             IntPtr ptr = IntPtr.Zero;
             try
@@ -246,7 +283,7 @@ namespace MicroWinUICore
             }
         }
 
-        private static int QueryActivePaths(out DISPLAYCONFIG_PATH_INFO[] paths, out DISPLAYCONFIG_MODE_INFO[] modes)
+        public static int QueryActivePaths(out DISPLAYCONFIG_PATH_INFO[] paths, out DISPLAYCONFIG_MODE_INFO[] modes)
         {
             paths = null;
             modes = null;
@@ -270,7 +307,7 @@ namespace MicroWinUICore
             }
         }
 
-        private static int PathSetSdrWhite(DISPLAYCONFIG_PATH_INFO path, int nits)
+        public static int PathSetSdrWhite(DISPLAYCONFIG_PATH_INFO path, int nits)
         {
             if (nits < 80) nits = 80;
             if (nits > 480) nits = 480;
@@ -419,22 +456,36 @@ namespace MicroWinUICore
             return false;
         }
 
+        [DllImport("mscms.dll", EntryPoint = "InternalRefreshCalibrationFromColorServer", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int InternalRefreshCalibrationFromColorServer();
+
+        [DllImport("mscms.dll", EntryPoint = "InternalRefreshCalibration", CharSet = CharSet.Unicode, SetLastError = true)]
+        public static extern int InternalRefreshCalibration(string deviceName, int isEnabled);
+
         /// <summary>全部校色重新加载</summary>
-        public static bool TryReloadAllCalibrationViaClsid()
+        public static bool TryReloadColorCalibration()
         {
+            bool success = false;
+
             try
             {
-                Guid clsid = new Guid("B210D694-C8DF-490D-9576-9E20CDBC20BD");
-                Type t = Type.GetTypeFromCLSID(clsid, true);
-                object comObj = Activator.CreateInstance(t); // 侧效：构造触发系统刷新
-                if (comObj != null)
-                {
-                    try { Marshal.ReleaseComObject(comObj); } catch { }
-                    return true;
-                }
+                int result = InternalRefreshCalibrationFromColorServer();
+                if (result == 0) success = true;
             }
             catch { }
-            return false;
+
+            if (!success)
+            {
+                try
+                {
+                    // deviceName == null 是为全部显示器
+                    int result = InternalRefreshCalibration(null, 1);
+                    if (result == 0) success = true;
+                }
+                catch { }
+            }
+
+            return success;
         }
     }
 }

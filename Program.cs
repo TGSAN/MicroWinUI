@@ -181,24 +181,36 @@ namespace MicroWinUICore
                     }
                     flyout.Items.Add(laptopKeepHDRBrightnessModeToggleItem);
                     var preciseBrightnessPairSubItem = trayManager.CreateMenuFlyoutSubItem("精准 SDR 内容亮度");
+                    preciseBrightnessPairSubItem.Icon = new FontIcon
+                    {
+                        Glyph = "\uE706"
+                    };
                     if (!page.IsBrightnessNitsControlSupportedForCurrentMonitor)
                     {
                         preciseBrightnessPairSubItem.IsEnabled = false;
                         preciseBrightnessPairSubItem.Text += " (不支持)";
                     }
                     else
-                    { 
+                    {
                         var pairs = await page.GetLaptopPreciseKeepHDRBrightnessLevelNitsPair();
+                        var currrntBrightnessLevelPercent = Math.Round(Brightness.TryGetCurrentBrightnessLevel() * 100);
                         if (pairs.Length > 0)
                         {
                             foreach (var pair in pairs)
                             {
-                                var level = pair.Key;
+                                var levelPercent = Math.Round(pair.Key * 100);
                                 var brightness = pair.Value;
-                                var item = trayManager.CreateMenuFlyoutItem($"亮度 {Math.Round(level * 100)} ({brightness} 尼特)", () =>
+                                var item = trayManager.CreateMenuFlyoutItem($"亮度 {levelPercent} ({brightness} 尼特)", () =>
                                 {
                                     page.SetNitsSync(brightness);
                                 });
+                                if (currrntBrightnessLevelPercent == levelPercent)
+                                {
+                                    item.Icon = new FontIcon
+                                    {
+                                        Glyph = "\uE73E"
+                                    };
+                                }
                                 preciseBrightnessPairSubItem.Items.Add(item);
                             }
                         }
@@ -213,11 +225,14 @@ namespace MicroWinUICore
                     flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
                     var reloadAllCalibItem = trayManager.CreateMenuFlyoutItem("重新加载显示器校色", () =>
                     {
-                        bool okAll = Win32API.TryReloadAllCalibrationViaClsid();
-                        //if (!SettingDisableNotify)
-                        //{
-                        //    notifyIcon.ShowBalloonTip(1500, okAll ? "已重新加载" : "重新加载失败", okAll ? "显示器校色重新加载成功" : "无法重新加载显示器校色", okAll ? ToolTipIcon.None : ToolTipIcon.Error);
-                        //}
+                        bool success = Win32API.TryReloadColorCalibration();
+                        if (!success) 
+                        {
+                            if (!SettingDisableNotify)
+                            {
+                                notifyIcon.ShowBalloonTip(1500, "失败", "无法重新加载显示器校色", ToolTipIcon.Info);
+                            }
+                        }
                     });
                     reloadAllCalibItem.Icon = new FontIcon
                     {
