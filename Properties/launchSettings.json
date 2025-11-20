@@ -2,7 +2,7 @@
   "profiles": {
     "MicroWinUI": {
       "commandName": "Project",
-      "commandLineArgs": ""
+      "commandLineArgs": "-h"
     }
   }
 }

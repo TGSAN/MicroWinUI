@@ -14,6 +14,7 @@ namespace MicroWinUICore
     public static class Program
     {
         static bool SettingHide = false;
+        static bool SettingEnableColorAccurate = false;
         static bool SettingEnableKeepHDR = false;
         static bool SettingDisableNotify = false;
         public static Action ShowWindow;
@@ -48,7 +49,8 @@ namespace MicroWinUICore
                     stringBuilder.AppendLine();
                     stringBuilder.AppendLine("--help, -h\t\t\t显示此帮助信息");
                     stringBuilder.AppendLine("--hide\t\t\t启动时隐藏主界面");
-                    stringBuilder.AppendLine("--enable-keep-hdr, -k\t启动时默认打开\"保持 HDR 亮度模式\"");
+                    stringBuilder.AppendLine("--enable-color-accurate\t启动时默认打开\"自动保持色准\"功能");
+                    stringBuilder.AppendLine("--enable-keep-hdr\t\t启动时默认打开\"自动保持 HDR 亮度内容\"功能");
                     stringBuilder.AppendLine("--disable-notify\t\t不要显示任何通知");
                     MessageBox.Show(stringBuilder.ToString().Trim());
                     return;
@@ -56,6 +58,10 @@ namespace MicroWinUICore
                 else if (arg.Equals("--hide", StringComparison.OrdinalIgnoreCase))
                 {
                     SettingHide = true;
+                }
+                else if (arg.Equals("--enable-color-accurate", StringComparison.OrdinalIgnoreCase) || arg.Equals("-k", StringComparison.OrdinalIgnoreCase))
+                {
+                    SettingEnableColorAccurate = true;
                 }
                 else if (arg.Equals("--enable-keep-hdr", StringComparison.OrdinalIgnoreCase) || arg.Equals("-k", StringComparison.OrdinalIgnoreCase))
                 {
@@ -133,6 +139,18 @@ namespace MicroWinUICore
                 page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn = true;
             }
 
+            if (SettingEnableColorAccurate)
+            {
+                page.DisplayColorOverrideScenarioAccurate = true;
+                if (page.DisplayColorOverrideScenarioAccurate == false)
+                {
+                    if (!SettingDisableNotify)
+                    {
+                        notifyIcon.ShowBalloonTip(1500, "失败", "无法开启自动保持色准，可能此显示器不支持此功能", ToolTipIcon.Info);
+                    }
+                }
+            }
+
             using TrayFlyoutManager trayManager = new(window, notifyIcon);
 
             notifyIcon.MouseClick += async (s, e) =>
@@ -166,6 +184,23 @@ namespace MicroWinUICore
                         flyout.Items.Add(showItem);
                     }
                     flyout.Items.Add(trayManager.CreateMenuFlyoutSeparator());
+                    var displayColorOverrideScenarioAccurate = trayManager.CreateMenuFlyoutItem("自动保持色准", () =>
+                    {
+                        var isOn = page.DisplayColorOverrideScenarioAccurate;
+                        page.DisplayColorOverrideScenarioAccurate = isOn;
+                        if (page.DisplayColorOverrideScenarioAccurate == isOn)
+                        {
+                            if (!SettingDisableNotify)
+                            {
+                                notifyIcon.ShowBalloonTip(1500, "失败", "无法开启自动保持色准，可能此显示器不支持此功能", ToolTipIcon.Info);
+                            }
+                        }
+                    });
+                    displayColorOverrideScenarioAccurate.Icon = new FontIcon
+                    {
+                        Glyph = page.DisplayColorOverrideScenarioAccurate ? "\uE73D" : "\uE739"
+                    };
+                    flyout.Items.Add(displayColorOverrideScenarioAccurate);
                     var laptopKeepHDRBrightnessModeToggleItem = trayManager.CreateMenuFlyoutItem("自动保持 HDR 亮度内容", () =>
                     {
                         page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn = !page.laptopKeepHDRBrightnessModeToggleSwitch.IsOn;

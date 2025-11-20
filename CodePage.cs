@@ -50,6 +50,39 @@ namespace MicroWinUI
         UISettings uiSettings; // 监听系统颜色/主题变化
         bool _exitConfirmed = false; // 跳过二次确认
 
+        public bool DisplayColorOverrideScenarioAccurate
+        {
+            get
+            {
+                if (displayEnhancementOverride.IsOverrideActive == true
+                    && displayEnhancementOverride.ColorOverrideSettings != null
+                    && displayEnhancementOverride.ColorOverrideSettings.DesiredDisplayColorOverrideScenario == DisplayColorOverrideScenario.Accurate)
+                {
+                    return true;
+                }
+                else
+                {
+                    return false;
+                }
+            }
+            set
+            {
+                if (DisplayColorOverrideScenarioAccurate)
+                {
+                    displayEnhancementOverride.ColorOverrideSettings = null;
+                    displayEnhancementOverride.StopOverride();
+                }
+                else
+                {
+                    displayEnhancementOverride.ColorOverrideSettings = ColorOverrideSettings.CreateFromDisplayColorOverrideScenario(DisplayColorOverrideScenario.Accurate);
+                    if (displayEnhancementOverride.CanOverride)
+                    {
+                        displayEnhancementOverride.RequestOverride();
+                    }
+                }
+            }
+        }
+
         public bool IsBrightnessNitsControlSupportedForCurrentMonitor
         {
             get
@@ -100,13 +133,6 @@ namespace MicroWinUI
             //}).Start();
 
             displayEnhancementOverride = DisplayEnhancementOverride.GetForCurrentView();
-            //var colorSettings = ColorOverrideSettings.CreateFromDisplayColorOverrideScenario(DisplayColorOverrideScenario.Accurate);
-            //displayEnhancementOverride.ColorOverrideSettings = colorSettings;
-            //if (displayEnhancementOverride.CanOverride)
-            //{
-            //    displayEnhancementOverride.RequestOverride();
-            //}
-
             displayInfo = DisplayInformation.GetForCurrentView();
             displayInfo.AdvancedColorInfoChanged += DisplayInfo_AdvancedColorInfoChanged;
 
