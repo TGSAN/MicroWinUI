@@ -142,13 +142,6 @@ namespace MicroWinUICore
             if (SettingEnableColorAccurate)
             {
                 page.DisplayColorOverrideScenarioAccurate = true;
-                if (page.DisplayColorOverrideScenarioAccurate == false)
-                {
-                    if (!SettingDisableNotify)
-                    {
-                        notifyIcon.ShowBalloonTip(1500, "失败", "无法开启自动保持色准，可能此显示器不支持此功能", ToolTipIcon.Info);
-                    }
-                }
             }
 
             using TrayFlyoutManager trayManager = new(window, notifyIcon);
@@ -188,13 +181,6 @@ namespace MicroWinUICore
                     {
                         var isOn = page.DisplayColorOverrideScenarioAccurate;
                         page.DisplayColorOverrideScenarioAccurate = isOn;
-                        if (page.DisplayColorOverrideScenarioAccurate == isOn)
-                        {
-                            if (!SettingDisableNotify)
-                            {
-                                notifyIcon.ShowBalloonTip(1500, "失败", "无法开启自动保持色准，可能此显示器不支持此功能", ToolTipIcon.Info);
-                            }
-                        }
                     });
                     displayColorOverrideScenarioAccurate.Icon = new FontIcon
                     {
