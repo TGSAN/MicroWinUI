@@ -228,20 +228,42 @@ namespace MicroWinUI
                                     }
                                     catch { /* Fallback to 1.0 */ }
                                     
-                                    using (var gammaEffect = new GammaTransferEffect
+                                    // 4. 生成 sRGB -> Linear 的查找表 (Look-Up Table)
+                                    // 这比简单的 Gamma 2.2 更精确，因为它遵循 sRGB 的分段函数定义
+                                    float[] srgbToLinearTable = new float[256];
+                                    for (int i = 0; i < 256; i++)
                                     {
-                                        Source = inkRenderTarget,
-                                        RedExponent = 2.2f,
-                                        GreenExponent = 2.2f,
-                                        BlueExponent = 2.2f,
-                                        AlphaExponent = 1.0f,
-                                        // 应用白点亮度校正
-                                        RedAmplitude = sdrWhiteGain,
-                                        GreenAmplitude = sdrWhiteGain,
-                                        BlueAmplitude = sdrWhiteGain
+                                        float u = i / 255.0f; // 归一化输入
+                                        float val;
+                                        if (u <= 0.04045f)
+                                        {
+                                            val = u / 12.92f;
+                                        }
+                                        else
+                                        {
+                                            val = (float)Math.Pow((u + 0.055) / 1.055, 2.4);
+                                        }
+                                        // 同时应用白点增益
+                                        srgbToLinearTable[i] = val * sdrWhiteGain;
+                                    }
+
+                                    // 构建渲染链：
+                                    // Ink(Premul) -> UnPremul -> Table(Linearize) -> Premul -> Draw
+                                    // 必须先 UnPremultiply，否则对于半透明像素 (边缘抗锯齿)，
+                                    // R_premul = R * A。直接查表会导致非线性误差 (LUT(R*A) != LUT(R)*A)。
+                                    using (var unpremulEffect = new UnPremultiplyEffect { Source = inkRenderTarget })
+                                    using (var tableEffect = new TableTransferEffect
+                                    {
+                                        Source = unpremulEffect,
+                                        RedTable = srgbToLinearTable,
+                                        GreenTable = srgbToLinearTable,
+                                        BlueTable = srgbToLinearTable,
+                                        // AlphaTable 留空，默认为 Identity
+                                        ClampOutput = false 
                                     })
+                                    using (var premulEffect = new PremultiplyEffect { Source = tableEffect })
                                     {
-                                         ds.DrawImage(gammaEffect);
+                                         ds.DrawImage(premulEffect);
                                     }
                                 }
                             }

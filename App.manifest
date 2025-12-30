@@ -65,6 +65,18 @@
         name="Microsoft.Graphics.Canvas.Effects.GammaTransferEffect"
         threadingModel="both"
         xmlns="urn:schemas-microsoft-com:winrt.v1" />
+    <activatableClass
+        name="Microsoft.Graphics.Canvas.Effects.UnPremultiplyEffect"
+        threadingModel="both"
+        xmlns="urn:schemas-microsoft-com:winrt.v1" />
+    <activatableClass
+        name="Microsoft.Graphics.Canvas.Effects.TableTransferEffect"
+        threadingModel="both"
+        xmlns="urn:schemas-microsoft-com:winrt.v1" />
+    <activatableClass
+        name="Microsoft.Graphics.Canvas.Effects.PremultiplyEffect"
+        threadingModel="both"
+        xmlns="urn:schemas-microsoft-com:winrt.v1" />
   </file>
 
 </assembly>
