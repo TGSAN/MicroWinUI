@@ -1,4 +1,5 @@
-﻿using Microsoft.Graphics.Canvas;
+﻿using Microsoft.Graphics.Canvas.Effects;
+using Microsoft.Graphics.Canvas;
 using Microsoft.Graphics.Canvas.UI.Xaml;
 using MicroWinUICore;
 using System;
@@ -165,7 +166,8 @@ namespace MicroWinUI
                         }
 
                         // 重新修正 Save 逻辑以确保绝对 1:1 (忽略原始 DPI)
-                         using (var renderTarget = new CanvasRenderTarget(
+                        // 重新修正 Save 逻辑以确保绝对 1:1 (忽略原始 DPI)
+                        using (var renderTarget = new CanvasRenderTarget(
                             device,
                             (float)rawBitmap.SizeInPixels.Width,
                             (float)rawBitmap.SizeInPixels.Height,
@@ -173,26 +175,55 @@ namespace MicroWinUI
                             DirectXPixelFormat.R16G16B16A16Float,
                             CanvasAlphaMode.Premultiplied))
                         {
-                            using (var ds = renderTarget.CreateDrawingSession())
+                            // 1. 先将笔迹绘制到一个临时的 sRGB RenderTarget 上
+                            // 这样我们明确了笔迹是在 sRGB 空间中定义的
+                            using (var inkRenderTarget = new CanvasRenderTarget(
+                                device,
+                                (float)rawBitmap.SizeInPixels.Width,
+                                (float)rawBitmap.SizeInPixels.Height,
+                                96.0f,
+                                DirectXPixelFormat.B8G8R8A8UIntNormalized, // 标准 sRGB 格式
+                                CanvasAlphaMode.Premultiplied))
                             {
-                                ds.Clear(Windows.UI.Colors.Transparent);
-                                // 绘制原图 (覆盖整个 Target)
-                                ds.DrawImage(rawBitmap, new Windows.Foundation.Rect(0, 0, renderTarget.Size.Width, renderTarget.Size.Height));
-                                
-                                // 绘制笔迹
-                                // InkCanvas 的大小(DIPs) = Pixels / ScaleFactor
-                                // RenderTarget 的大小(DIPs at 96 DPI) = Pixels
-                                // 所以笔迹需要放大 ScaleFactor 倍才能匹配 RenderTarget
-                                float scaleX = (float)(rawBitmap.SizeInPixels.Width / inkCanvas.Width);
-                                float scaleY = (float)(rawBitmap.SizeInPixels.Height / inkCanvas.Height);
-                                
-                                // 如果 inkCanvas.Width 是 NaN (未初始化) 或者 0，这里会出错，但在 OpenImageAsync 里我们设置了它。
-                                if (!float.IsNaN(scaleX) && !float.IsNaN(scaleY) && !float.IsInfinity(scaleX) && !float.IsInfinity(scaleY))
+                                using (var dsInk = inkRenderTarget.CreateDrawingSession())
                                 {
-                                    ds.Transform = Matrix3x2.CreateScale(scaleX, scaleY);
+                                    dsInk.Clear(Windows.UI.Colors.Transparent);
+                                    
+                                    // 计算缩放并应用
+                                    float scaleX = (float)(rawBitmap.SizeInPixels.Width / inkCanvas.Width);
+                                    float scaleY = (float)(rawBitmap.SizeInPixels.Height / inkCanvas.Height);
+                                    if (!float.IsNaN(scaleX) && !float.IsNaN(scaleY) && !float.IsInfinity(scaleX) && !float.IsInfinity(scaleY))
+                                    {
+                                        dsInk.Transform = Matrix3x2.CreateScale(scaleX, scaleY);
+                                    }
+                                    
+                                    dsInk.DrawInk(inkCanvas.InkPresenter.StrokeContainer.GetStrokes());
                                 }
 
-                                ds.DrawInk(inkCanvas.InkPresenter.StrokeContainer.GetStrokes());
+                                // 2. 合成最终图片
+                                using (var ds = renderTarget.CreateDrawingSession())
+                                {
+                                    ds.Clear(Windows.UI.Colors.Transparent);
+                                    
+                                    // 绘制 HDR 原图 (直接保留 rawBitmap 数据)
+                                    ds.DrawImage(rawBitmap, new Windows.Foundation.Rect(0, 0, renderTarget.Size.Width, renderTarget.Size.Height));
+                                    
+                                    // 绘制笔迹层
+                                    // 由于 inkRenderTarget 是 sRGB 的，而目标 renderTarget 是 ScRGB (Linear) 的
+                                    // 我们需要进行 sRGB -> Linear 的转换，即 Gamma 2.2 扩展
+                                    // 这样 0.9 sRGB 才会变成正确的 ~0.79 Linear，而不是被当做 0.9 Linear (过亮)
+                                    using (var gammaEffect = new GammaTransferEffect
+                                    {
+                                        Source = inkRenderTarget,
+                                        RedExponent = 2.2f,
+                                        GreenExponent = 2.2f,
+                                        BlueExponent = 2.2f,
+                                        AlphaExponent = 1.0f
+                                    })
+                                    {
+                                         ds.DrawImage(gammaEffect);
+                                    }
+                                }
                             }
                             
                             await renderTarget.SaveAsync(stream, CanvasBitmapFileFormat.JpegXR);
