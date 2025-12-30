@@ -3,20 +3,32 @@
   <PropertyGroup>
     <OutputType>WinExe</OutputType>
     <TargetFramework>net48</TargetFramework>
-    <TargetPlatformVersion>10.0.22621.0</TargetPlatformVersion>
+    <TargetPlatformVersion>10.0.26100.0</TargetPlatformVersion>
     <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
     <LangVersion>latest</LangVersion>
     <ApplicationManifest>App.manifest</ApplicationManifest>
     <UseWindowsForms>true</UseWindowsForms>
     <!-- Add workaround for WinRT support in the old .NET SDK -->
     <SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-	<MileXamlNoSunValleyXamlStyle>false</MileXamlNoSunValleyXamlStyle>
+    <PlatformTarget>x64</PlatformTarget>
+    <RuntimeIdentifier>win10-x64</RuntimeIdentifier>
+    <MileXamlNoSunValleyXamlStyle>false</MileXamlNoSunValleyXamlStyle>
+    <Platforms>x64</Platforms>
   </PropertyGroup>
   
   <ItemGroup>
-    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.0.1" />
-    <PackageReference Include="Mile.Xaml" Version="2.2.890" />
+    <PackageReference Include="Mile.Xaml" Version="2.5.1250" />
+    <PackageReference Include="System.Numerics.Vectors" Version="4.6.1" />
+    <PackageReference Include="Win2D.uwp" Version="1.28.2" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.VCRTForwarders.140" Version="1.0.7" GeneratePathProperty="true" />
   </ItemGroup>
+
+  <Target Name="CopyWin2DAssets" AfterTargets="Build">
+    <Copy SourceFiles="$(PkgWin2D_uwp)\runtimes\win-x64\native\Microsoft.Graphics.Canvas.dll" DestinationFolder="$(OutDir)" />
+    <!-- 手动复制 VCRT Forwarders，Win2D UWP 依赖这些 _app.dll -->
+    <Copy SourceFiles="$(PkgMicrosoft_VCRTForwarders_140)\runtimes\win10-x64\native\release\concrt140_app.dll" DestinationFolder="$(OutDir)" />
+    <Copy SourceFiles="$(PkgMicrosoft_VCRTForwarders_140)\runtimes\win10-x64\native\release\msvcp140_app.dll" DestinationFolder="$(OutDir)" />
+    <Copy SourceFiles="$(PkgMicrosoft_VCRTForwarders_140)\runtimes\win10-x64\native\release\vcruntime140_app.dll" DestinationFolder="$(OutDir)" />
+  </Target>
 
 </Project>
