@@ -10,6 +10,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -18,7 +19,9 @@
             <AppBarButton Icon="Save" Label="保存" Click="SaveButton_Click"/>
         </CommandBar>
 
-        <Grid Grid.Row="1" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <InkToolbar TargetInkCanvas="{x:Bind inkCanvas}" Grid.Row="1" />
+
+        <Grid Grid.Row="2" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
             <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" ZoomMode="Enabled" MinZoomFactor="0.1" MaxZoomFactor="5.0">
                 <Grid x:Name="ImageGrid" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Image x:Name="DisplayImage" Stretch="Fill" UseLayoutRounding="True" />
