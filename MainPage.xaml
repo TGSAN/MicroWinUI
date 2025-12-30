@@ -11,25 +11,32 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
-            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
-        <CommandBar DefaultLabelPosition="Right">
-            <AppBarButton Icon="OpenFile" Label="打开" Click="OpenButton_Click"/>
-            <AppBarButton x:Name="SaveButton" Icon="Save" Label="保存" Click="SaveButton_Click" IsEnabled="False"/>
-        </CommandBar>
+        <!-- Toolbar Area -->
+        <Grid Grid.Row="0" Background="Transparent" BorderThickness="0,0,0,1" BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
 
-        <InkToolbar x:Name="MainInkToolbar" TargetInkCanvas="{x:Bind inkCanvas}" Grid.Row="1" ActiveToolChanged="InkToolbar_ActiveToolChanged" IsEnabled="False">
-            <InkToolbarCustomToggleButton x:Name="HandToolButton" Click="HandToolButton_Click" ToolTipService.ToolTip="抓手工具" IsEnabled="{x:Bind IsCheckedNegation(HandToolButton.IsChecked), Mode=OneWay}">
-                <FontIcon Glyph="&#xE7C9;"/>
-            </InkToolbarCustomToggleButton>
-            <InkToolbarCustomToggleButton x:Name="CropButton" Click="CropButton_Click" ToolTipService.ToolTip="裁剪" IsEnabled="{x:Bind IsCheckedNegation(CropButton.IsChecked), Mode=OneWay}">
-                <FontIcon Glyph="&#xE7A8;"/>
-            </InkToolbarCustomToggleButton>
-        </InkToolbar>
+            <InkToolbar x:Name="MainInkToolbar" TargetInkCanvas="{x:Bind inkCanvas}" Grid.Column="0" VerticalAlignment="Center" ActiveToolChanged="InkToolbar_ActiveToolChanged" IsEnabled="False">
+                <InkToolbarCustomToggleButton x:Name="HandToolButton" Click="HandToolButton_Click" ToolTipService.ToolTip="抓手工具" IsEnabled="{x:Bind IsCheckedNegation(HandToolButton.IsChecked), Mode=OneWay}">
+                    <FontIcon Glyph="&#xE7C9;"/>
+                </InkToolbarCustomToggleButton>
+                <InkToolbarCustomToggleButton x:Name="CropButton" Click="CropButton_Click" ToolTipService.ToolTip="裁剪" IsEnabled="{x:Bind IsCheckedNegation(CropButton.IsChecked), Mode=OneWay}">
+                    <FontIcon Glyph="&#xE7A8;"/>
+                </InkToolbarCustomToggleButton>
+            </InkToolbar>
 
-        <Grid Grid.Row="2" Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}">
+            <CommandBar Grid.Column="1" DefaultLabelPosition="Right" Background="Transparent" HorizontalAlignment="Right" OverflowButtonVisibility="Collapsed">
+                <AppBarButton Icon="OpenFile" Label="打开" Click="OpenButton_Click"/>
+                <AppBarButton x:Name="SaveButton" Icon="Save" Label="保存" Click="SaveButton_Click" IsEnabled="False"/>
+            </CommandBar>
+        </Grid>
+
+        <Grid Grid.Row="1" Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}">
             <ScrollViewer x:Name="MainScrollViewer" 
                           HorizontalScrollBarVisibility="Auto" 
                           VerticalScrollBarVisibility="Auto" 
@@ -49,7 +56,7 @@
 
             <StackPanel x:Name="CropButtonPanel" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,30" Background="{ThemeResource SystemControlBackgroundChromeMediumLowBrush}" Padding="10" CornerRadius="8" Visibility="Collapsed">
                 <Button Content="确认裁剪" Click="ConfirmCrop_Click" Style="{ThemeResource AccentButtonStyle}" Margin="0,0,10,0"/>
-                <Button Content="取消" Click="CancelCrop_Click"/>
+                <Button Content="取消" Click="CancelCrop_Click" Style="{StaticResource DefaultButtonStyle}"/>
             </StackPanel>
         </Grid>
     </Grid>
