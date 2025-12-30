@@ -212,13 +212,33 @@ namespace MicroWinUI
                                     // 由于 inkRenderTarget 是 sRGB 的，而目标 renderTarget 是 ScRGB (Linear) 的
                                     // 我们需要进行 sRGB -> Linear 的转换，即 Gamma 2.2 扩展
                                     // 这样 0.9 sRGB 才会变成正确的 ~0.79 Linear，而不是被当做 0.9 Linear (过亮)
+                                    // 3. 计算 SDR 白点增益
+                                    // scRGB 标准定义 1.0 = 80 nits。但屏幕的 SDR 白点通常高于 80 nits (e.g. 200 nits)。
+                                    // 为了让 sRGB 笔迹看起来和屏幕上显示的一致 (屏幕上 sRGB White 被映射到了 SdrWhiteLevel)，
+                                    // 我们需要对笔迹应用增益：Gain = SdrWhiteLevel / 80。
+                                    float sdrWhiteGain = 1.0f;
+                                    try 
+                                    {
+                                        var mainDisplayInfo = DisplayInformation.GetForCurrentView();
+                                        var colorInfo = mainDisplayInfo.GetAdvancedColorInfo();
+                                        if (colorInfo != null)
+                                        {
+                                            sdrWhiteGain = (float)colorInfo.SdrWhiteLevelInNits / 80.0f;
+                                        }
+                                    }
+                                    catch { /* Fallback to 1.0 */ }
+                                    
                                     using (var gammaEffect = new GammaTransferEffect
                                     {
                                         Source = inkRenderTarget,
                                         RedExponent = 2.2f,
                                         GreenExponent = 2.2f,
                                         BlueExponent = 2.2f,
-                                        AlphaExponent = 1.0f
+                                        AlphaExponent = 1.0f,
+                                        // 应用白点亮度校正
+                                        RedAmplitude = sdrWhiteGain,
+                                        GreenAmplitude = sdrWhiteGain,
+                                        BlueAmplitude = sdrWhiteGain
                                     })
                                     {
                                          ds.DrawImage(gammaEffect);
