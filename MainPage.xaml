@@ -20,13 +20,13 @@
             <AppBarButton Icon="Save" Label="保存" Click="SaveButton_Click"/>
         </CommandBar>
 
-        <InkToolbar x:Name="MainInkToolbar" TargetInkCanvas="{x:Bind inkCanvas}" Grid.Row="1" ActiveToolChanged="InkToolbar_ActiveToolChanged">
-            <InkToolbarCustomToolButton x:Name="HandToolButton" Click="HandToolButton_Click" ToolTipService.ToolTip="抓手工具">
+        <InkToolbar x:Name="MainInkToolbar" TargetInkCanvas="{x:Bind inkCanvas}" Grid.Row="1" ActiveToolChanged="InkToolbar_ActiveToolChanged" IsEnabled="False">
+            <InkToolbarCustomToggleButton x:Name="HandToolButton" Click="HandToolButton_Click" ToolTipService.ToolTip="抓手工具" IsEnabled="{x:Bind IsCheckedNegation(HandToolButton.IsChecked), Mode=OneWay}">
                 <FontIcon Glyph="&#xE7C9;"/>
-            </InkToolbarCustomToolButton>
-            <InkToolbarCustomToolButton x:Name="CropButton" Click="CropButton_Click" ToolTipService.ToolTip="裁剪">
+            </InkToolbarCustomToggleButton>
+            <InkToolbarCustomToggleButton x:Name="CropButton" Click="CropButton_Click" ToolTipService.ToolTip="裁剪" IsEnabled="{x:Bind IsCheckedNegation(CropButton.IsChecked), Mode=OneWay}">
                 <FontIcon Glyph="&#xE7A8;"/>
-            </InkToolbarCustomToolButton>
+            </InkToolbarCustomToggleButton>
         </InkToolbar>
 
         <Grid Grid.Row="2" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
@@ -39,8 +39,7 @@
                           PointerPressed="MainScrollViewer_PointerPressed"
                           PointerMoved="MainScrollViewer_PointerMoved"
                           PointerReleased="MainScrollViewer_PointerReleased"
-                          PointerCanceled="MainScrollViewer_PointerReleased"
-                          PointerWheelChanged="MainScrollViewer_PointerWheelChanged">
+                          PointerCanceled="MainScrollViewer_PointerReleased">
                 <Grid x:Name="ImageGrid" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Image x:Name="DisplayImage" Stretch="Fill" UseLayoutRounding="True" />
                     <InkCanvas x:Name="inkCanvas" />

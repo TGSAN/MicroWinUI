@@ -1,6 +1,5 @@
 ﻿using Microsoft.Graphics.Canvas.Effects;
 using Microsoft.Graphics.Canvas;
-using Microsoft.Graphics.Canvas.UI.Xaml;
 using MicroWinUICore;
 using System;
 using System.Collections.Generic;
@@ -15,6 +14,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media.Imaging;
 using System.Numerics;
+using Windows.UI.Xaml.Media;
 using Windows.Storage.Streams;
 
 namespace MicroWinUI
@@ -33,6 +33,12 @@ namespace MicroWinUI
         private CanvasBitmap rawBitmap; // 用于保存的原始数据
         private bool _isHandMode = false;
         private Windows.Foundation.Point? _lastDragPoint;
+        // 惯性滚动相关字段
+        private Vector2 _velocity;
+        private DateTime _lastMoveTime;
+        private bool _isInertiaRendering;
+        private const double Friction = 0.88; 
+        private const double VelocityThreshold = 0.1;
         
         public MainPage(IslandWindow coreWindow)
         {
@@ -108,7 +114,8 @@ namespace MicroWinUI
                         // 清除旧笔迹
                         inkCanvas.InkPresenter.StrokeContainer.Clear();
                         
-                        // 打开新图片后默认切换回抓手模式，方便浏览
+                        // 打开新图片后默认切换回抓手模式
+                        MainInkToolbar.IsEnabled = true;
                         EnableHandMode();
                     }
                 }
@@ -292,6 +299,11 @@ namespace MicroWinUI
         {
             if (rawBitmap == null) return;
             
+            // 界面状态: 开启裁剪，关闭抓手
+            CropButton.IsChecked = true;
+            HandToolButton.IsChecked = false;
+            MainInkToolbar.ActiveTool = null;
+            
             // 禁用缩放以避免冲突
             MainScrollViewer.ZoomMode = ZoomMode.Disabled;
             
@@ -306,6 +318,10 @@ namespace MicroWinUI
             cropControl.Visibility = Visibility.Collapsed;
             CropButtonPanel.Visibility = Visibility.Collapsed;
             MainScrollViewer.ZoomMode = ZoomMode.Enabled;
+            
+            // 退出裁剪
+            CropButton.IsChecked = false;
+            // 恢复抓手? 由调用方决定
         }
 
         private async void CropControl_CropConfirmed(object sender, Windows.Foundation.Rect uiCropRect)
@@ -316,6 +332,9 @@ namespace MicroWinUI
                 CropButtonPanel.Visibility = Visibility.Collapsed;
                 MainScrollViewer.ZoomMode = ZoomMode.Enabled;
 
+                CropButton.IsChecked = false;
+                EnableHandMode();
+                
                 // 1. 计算图片空间的裁剪区域
                 double scaleFactor = rawBitmap.SizeInPixels.Width / DisplayImage.ActualWidth;
                 Windows.Foundation.Rect pixelRect = new Windows.Foundation.Rect(
@@ -403,31 +422,51 @@ namespace MicroWinUI
         private void CancelCrop_Click(object sender, RoutedEventArgs e)
         {
             cropControl.Cancel();
+            EnableHandMode();
         }
 
         private void EnableHandMode()
         {
+            // 如果裁剪处于活动状态，取消它 (仅隐藏 UI，不触发状态循环，因下文会设置状态)
+            if (cropControl.Visibility == Visibility.Visible)
+            {
+                cropControl.Cancel();
+            }
+
             _isHandMode = true;
             inkCanvas.InkPresenter.IsInputEnabled = false;
-            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Hand, 1);
+            
+            HandToolButton.IsChecked = true;
+            CropButton.IsChecked = false;
+            MainInkToolbar.ActiveTool = null;
         }
 
         private void EnableInkMode()
         {
+            // 如果裁剪处于活动状态，取消它
+            if (cropControl.Visibility == Visibility.Visible)
+            {
+                cropControl.Cancel();
+            }
+
             _isHandMode = false;
             inkCanvas.InkPresenter.IsInputEnabled = true;
-            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0);
+
+            HandToolButton.IsChecked = false;
+            CropButton.IsChecked = false;
         }
 
         private void HandToolButton_Click(object sender, RoutedEventArgs e)
         {
+            // 模拟 RadioButton 行为：点击即选中，不允许点击取消
+            HandToolButton.IsChecked = true;
             EnableHandMode();
         }
 
         private void InkToolbar_ActiveToolChanged(InkToolbar sender, object args)
         {
-            // 如果切换到了内置画笔 (Pen, Pencil 等)，则退出抓手模式
-            if (sender.ActiveTool != null && sender.ActiveTool != HandToolButton)
+            // 如果切换到了画笔
+            if (sender.ActiveTool != null)
             {
                 EnableInkMode();
             }
@@ -437,23 +476,41 @@ namespace MicroWinUI
         {
             if (_isHandMode)
             {
+                // 停止惯性滚动
+                StopInertia();
+                
                 _lastDragPoint = e.GetCurrentPoint(MainScrollViewer).Position;
-                Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Hand, 1);
+                _velocity = Vector2.Zero;
+                _lastMoveTime = DateTime.Now;
+                
                 (sender as UIElement).CapturePointer(e.Pointer);
                 e.Handled = true;
             }
         }
+
+
 
         private void MainScrollViewer_PointerMoved(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
             if (_isHandMode && _lastDragPoint.HasValue)
             {
                 var currentPoint = e.GetCurrentPoint(MainScrollViewer).Position;
+                var currentTime = DateTime.Now;
+                
                 double deltaX = currentPoint.X - _lastDragPoint.Value.X;
                 double deltaY = currentPoint.Y - _lastDragPoint.Value.Y;
+                
+                // 计算瞬时速度 (pixels / ms)
+                double dt = (currentTime - _lastMoveTime).TotalMilliseconds;
+                if (dt > 0)
+                {
+                    _velocity = new Vector2((float)(deltaX / dt), (float)(deltaY / dt));
+                }
 
                 MainScrollViewer.ChangeView(MainScrollViewer.HorizontalOffset - deltaX, MainScrollViewer.VerticalOffset - deltaY, null, true);
+                
                 _lastDragPoint = currentPoint;
+                _lastMoveTime = currentTime;
                 e.Handled = true;
             }
         }
@@ -465,18 +522,58 @@ namespace MicroWinUI
                 _lastDragPoint = null;
                 (sender as UIElement).ReleasePointerCapture(e.Pointer);
                 e.Handled = true;
+                
+                // 如果用户在释放前停留了超过 50ms，认为是有意停止，不进行惯性
+                if ((DateTime.Now - _lastMoveTime).TotalMilliseconds > 50)
+                {
+                    _velocity = Vector2.Zero;
+                }
+
+                // 如果速度足够大，启动惯性滚动
+                if (_velocity.LengthSquared() > VelocityThreshold * VelocityThreshold)
+                {
+                    StartInertia();
+                }
             }
         }
 
-        private void MainScrollViewer_PointerWheelChanged(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        private void StartInertia()
         {
-            var keyState = Window.Current.CoreWindow.GetKeyState(Windows.System.VirtualKey.Shift);
-            if ((keyState & CoreVirtualKeyStates.Down) == CoreVirtualKeyStates.Down)
+            if (!_isInertiaRendering)
             {
-                var delta = e.GetCurrentPoint(MainScrollViewer).Properties.MouseWheelDelta;
-                MainScrollViewer.ChangeView(MainScrollViewer.HorizontalOffset - delta, null, null);
-                e.Handled = true;
+                CompositionTarget.Rendering += OnCompositionTargetRendering;
+                _isInertiaRendering = true;
             }
         }
+
+        private void StopInertia()
+        {
+            if (_isInertiaRendering)
+            {
+                CompositionTarget.Rendering -= OnCompositionTargetRendering;
+                _isInertiaRendering = false;
+            }
+        }
+
+        private void OnCompositionTargetRendering(object sender, object e)
+        {
+            // 简单物理模拟: 速度衰减与位移更新
+            // 假设帧率为 60fps, dt ~ 16.6ms
+            double dt = 16.6; 
+            
+            double dX = _velocity.X * dt;
+            double dY = _velocity.Y * dt;
+
+            MainScrollViewer.ChangeView(MainScrollViewer.HorizontalOffset - dX, MainScrollViewer.VerticalOffset - dY, null, true);
+
+            _velocity *= (float)Friction;
+
+            // 当速度极小时停止
+            if (_velocity.LengthSquared() < 0.001) 
+            {
+                StopInertia();
+            }
+        }
+        public bool IsCheckedNegation(bool? value) => !(value == true);
     }
 }
