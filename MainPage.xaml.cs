@@ -29,7 +29,7 @@ namespace MicroWinUI
 
     public sealed partial class MainPage : Page
     {
-        private IslandWindow coreWindow;
+        private IslandWindow coreWindowHost;
         private CanvasBitmap rawBitmap; // 用于保存的原始数据
         private bool _isHandMode = false;
         private Windows.Foundation.Point? _lastDragPoint;
@@ -40,10 +40,10 @@ namespace MicroWinUI
         private const double Friction = 0.88;
         private const double VelocityThreshold = 0.1;
 
-        public MainPage(IslandWindow coreWindow)
+        public MainPage(IslandWindow coreWindowHost)
         {
-            this.coreWindow = coreWindow;
-            coreWindow.Backdrop = IslandWindow.SystemBackdrop.Tabbed;
+            this.coreWindowHost = coreWindowHost;
+            coreWindowHost.Backdrop = IslandWindow.SystemBackdrop.Tabbed;
             this.InitializeComponent();
 
             // 初始化 InkCanvas 支持的输入类型
@@ -70,7 +70,7 @@ namespace MicroWinUI
                 var picker = new FileOpenPicker();
 
                 // 初始化窗口句柄
-                ((IInitializeWithWindow)(object)picker).Initialize(coreWindow.Handle);
+                ((IInitializeWithWindow)(object)picker).Initialize(coreWindowHost.Handle);
 
                 picker.ViewMode = PickerViewMode.Thumbnail;
                 picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
@@ -137,7 +137,7 @@ namespace MicroWinUI
                 var picker = new FileSavePicker();
 
                 // 初始化窗口句柄
-                ((IInitializeWithWindow)(object)picker).Initialize(coreWindow.Handle);
+                ((IInitializeWithWindow)(object)picker).Initialize(coreWindowHost.Handle);
 
                 picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
                 picker.FileTypeChoices.Add("JPEG XR", new List<string>() { ".jxr" });

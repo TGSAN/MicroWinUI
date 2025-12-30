@@ -1,13 +1,17 @@
-﻿using Mile.Xaml;
+﻿using Microsoft.Win32;
+using Mile.Xaml;
+using Mile.Xaml.Interop;
 using System;
-using System.Windows.Forms;
 using System.Drawing;
-using System.Runtime.InteropServices;
-using Windows.UI.Xaml;
-using Windows.UI.ViewManagement;
-using System.Xml.Linq;
 using System.Runtime;
-using Microsoft.Win32;
+using System.Runtime.InteropServices;
+using System.Windows.Forms;
+using System.Xml.Linq;
+using Windows.UI.Core;
+using Windows.UI.ViewManagement;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Xaml.Media;
 
 namespace MicroWinUICore
 {
@@ -57,6 +61,25 @@ namespace MicroWinUICore
             set
             {
                 xamlHost.Child = value;
+                if (value != null)
+                {
+                    CoreWindow coreWindow = CoreWindow.GetForCurrentThread();
+                    _coreWindowWHND = coreWindow.GetInterop().GetWindowHandle();
+                    UpdateCoreWindowPos();
+                }
+                else
+                {
+                    _coreWindowWHND = IntPtr.Zero;
+                }
+            }
+        }
+
+        private IntPtr _coreWindowWHND = IntPtr.Zero;
+        public IntPtr coreWindowHWND
+        {
+            get
+            {
+                return _coreWindowWHND;
             }
         }
 
@@ -67,7 +90,55 @@ namespace MicroWinUICore
                 Invoke(UpdateTheme);
             };
             this.Load += IslandForm_Load;
-            this.Activated += IslandWindow_Activated; ;
+            this.Activated += IslandWindow_Activated;
+
+            this.Resize += IslandWindow_Resize;
+            this.Move += IslandWindow_Move;
+            xamlHost.HandleCreated += XamlHost_HandleCreated;
+            xamlHost.SizeChanged += XamlHost_SizeChanged;
+        }
+
+        private void XamlHost_SizeChanged(object sender, EventArgs e)
+        {
+            UpdateCoreWindowPos();
+        }
+
+        private void XamlHost_HandleCreated(object sender, EventArgs e)
+        {
+            UpdateCoreWindowPos();
+        }
+
+        private void IslandWindow_Move(object sender, EventArgs e)
+        {
+            UpdateCoreWindowPos();
+        }
+
+        private void IslandWindow_Resize(object sender, EventArgs e)
+        {
+            UpdateCoreWindowPos();
+        }
+
+        private void UpdateCoreWindowPos()
+        {
+            if (coreWindowHWND != IntPtr.Zero && xamlHost.Child != null && xamlHost.IsHandleCreated)
+            {
+                var openPopups = VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlHost.Child.XamlRoot);
+                foreach (var openPopup in openPopups)
+                {
+                    openPopup.IsOpen = false;
+                }
+
+                Rectangle rect = xamlHost.RectangleToScreen(xamlHost.ClientRectangle);
+                Win32API.SetWindowPos(
+                    coreWindowHWND,
+                    Win32API.HWND_TOP,
+                    rect.Left,
+                    rect.Top,
+                    rect.Width,
+                    rect.Height,
+                    Win32API.SWP_NOZORDER | Win32API.SWP_NOACTIVATE
+                );
+            }
         }
 
         private void IslandWindow_Activated(object sender, EventArgs e)
@@ -180,7 +251,8 @@ namespace MicroWinUICore
             int _blurBackgroundColor = 0xFFFFFF; /* Drak BGR color format */
             // int _blurBackgroundColor = 0xE6E6E6; /* Drak BGR color format */
 
-            var accent = new Win32API.AccentPolicy {
+            var accent = new Win32API.AccentPolicy
+            {
                 AccentState = Win32API.AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT,
                 GradientColor = (_blurOpacity << 24) | (_blurBackgroundColor & 0xFFFFFF)
             };
