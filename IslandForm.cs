@@ -10,6 +10,7 @@ using System.Xml.Linq;
 using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Media;
 
 namespace MicroWinUICore
 {
@@ -292,6 +293,58 @@ namespace MicroWinUICore
             }
             catch { }
             return registData == "1";
+        }
+
+        private void CloseAllXamlPopups()
+        {
+            xamlHost.Invoke(() =>
+            {
+                var xamlRoot = xamlHost.Child.XamlRoot;
+                if (xamlRoot != null)
+                {
+                    var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot);
+                    foreach (var popup in popups)
+                    {
+                        popup.IsOpen = false;
+                    }
+                }
+            });
+        }
+
+        private bool IsPointInXamlIsland(Point screenPoint)
+        {
+            var clientPoint = xamlHost.PointToClient(screenPoint);
+            return xamlHost.ClientRectangle.Contains(clientPoint);
+        }
+
+        protected override void WndProc(ref Message m)
+        {
+            const int WM_NCLBUTTONDOWN = 0x00A1; // 非客户区（标题栏等）鼠标按下
+            const int WM_LBUTTONDOWN = 0x0201;   // 客户区鼠标按下
+            const int WM_ACTIVATE = 0x0006;
+            const int WM_ACTIVATEAPP = 0x001C;
+
+            switch (m.Msg)
+            {
+                case WM_NCLBUTTONDOWN:
+                case WM_LBUTTONDOWN:
+                    // 检查点击是否在 XAML Island 控件外部
+                    if (!IsPointInXamlIsland(Cursor.Position))
+                    {
+                        CloseAllXamlPopups();
+                    }
+                    break;
+
+                case WM_ACTIVATE:
+                    // 窗口激活状态改变时也可能需要关闭
+                    if ((int)m.WParam == 0) // WA_INACTIVE
+                    {
+                        CloseAllXamlPopups();
+                    }
+                    break;
+            }
+
+            base.WndProc(ref m);
         }
 
         protected override void OnPaintBackground(PaintEventArgs e)
