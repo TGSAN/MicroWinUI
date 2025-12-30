@@ -5,6 +5,7 @@
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:canvas="using:Microsoft.Graphics.Canvas.UI.Xaml"
+    xmlns:local="using:MicroWinUI"
     mc:Ignorable="d">
 
     <Grid>
@@ -19,15 +20,25 @@
             <AppBarButton Icon="Save" Label="保存" Click="SaveButton_Click"/>
         </CommandBar>
 
-        <InkToolbar TargetInkCanvas="{x:Bind inkCanvas}" Grid.Row="1" />
+        <InkToolbar TargetInkCanvas="{x:Bind inkCanvas}" Grid.Row="1">
+            <InkToolbarCustomToolButton x:Name="CropButton" Click="CropButton_Click" ToolTipService.ToolTip="裁剪">
+                <SymbolIcon Symbol="Crop"/>
+            </InkToolbarCustomToolButton>
+        </InkToolbar>
 
         <Grid Grid.Row="2" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-            <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" ZoomMode="Enabled" MinZoomFactor="0.1" MaxZoomFactor="5.0">
+            <ScrollViewer x:Name="MainScrollViewer" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" ZoomMode="Enabled" MinZoomFactor="0.1" MaxZoomFactor="5.0">
                 <Grid x:Name="ImageGrid" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Image x:Name="DisplayImage" Stretch="Fill" UseLayoutRounding="True" />
                     <InkCanvas x:Name="inkCanvas" />
+                    <local:CropControl x:Name="cropControl" Visibility="Collapsed" CropConfirmed="CropControl_CropConfirmed" CropCancelled="CropControl_CropCancelled" />
                 </Grid>
             </ScrollViewer>
+
+            <StackPanel x:Name="CropButtonPanel" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Bottom" Margin="0,0,0,30" Background="{ThemeResource SystemControlBackgroundChromeMediumLowBrush}" Padding="10" CornerRadius="8" Visibility="Collapsed">
+                <Button Content="确认裁剪" Click="ConfirmCrop_Click" Style="{ThemeResource AccentButtonStyle}" Margin="0,0,10,0"/>
+                <Button Content="取消" Click="CancelCrop_Click"/>
+            </StackPanel>
         </Grid>
     </Grid>
 </Page>

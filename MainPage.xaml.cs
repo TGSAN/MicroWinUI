@@ -15,6 +15,7 @@ using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media.Imaging;
 using System.Numerics;
+using Windows.Storage.Streams;
 
 namespace MicroWinUI
 {
@@ -277,6 +278,123 @@ namespace MicroWinUI
             {
                 System.Diagnostics.Debug.WriteLine($"SaveImageAsync Error: {ex.Message}");
             }
+        }
+
+        private void CropButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (rawBitmap == null) return;
+            
+            // 禁用缩放以避免冲突
+            MainScrollViewer.ZoomMode = ZoomMode.Disabled;
+            
+            // 初始化并显示裁剪控件
+            cropControl.Visibility = Visibility.Visible;
+            CropButtonPanel.Visibility = Visibility.Visible;
+            cropControl.Initialize(DisplayImage.ActualWidth, DisplayImage.ActualHeight);
+        }
+
+        private void CropControl_CropCancelled(object sender, EventArgs e)
+        {
+            cropControl.Visibility = Visibility.Collapsed;
+            CropButtonPanel.Visibility = Visibility.Collapsed;
+            MainScrollViewer.ZoomMode = ZoomMode.Enabled;
+        }
+
+        private async void CropControl_CropConfirmed(object sender, Windows.Foundation.Rect uiCropRect)
+        {
+            try
+            {
+                cropControl.Visibility = Visibility.Collapsed;
+                CropButtonPanel.Visibility = Visibility.Collapsed;
+                MainScrollViewer.ZoomMode = ZoomMode.Enabled;
+
+                // 1. 计算图片空间的裁剪区域
+                double scaleFactor = rawBitmap.SizeInPixels.Width / DisplayImage.ActualWidth;
+                Windows.Foundation.Rect pixelRect = new Windows.Foundation.Rect(
+                    Math.Round(uiCropRect.X * scaleFactor), 
+                    Math.Round(uiCropRect.Y * scaleFactor), 
+                    Math.Round(uiCropRect.Width * scaleFactor), 
+                    Math.Round(uiCropRect.Height * scaleFactor));
+
+                var device = CanvasDevice.GetSharedDevice();
+
+                // 2. 裁剪图片 (创建新的 rawBitmap)
+                // 使用 RenderTarget 绘制原图的指定区域到新画布
+                var newBitmap = new CanvasRenderTarget(
+                    device, 
+                    (float)pixelRect.Width, 
+                    (float)pixelRect.Height, 
+                    rawBitmap.Dpi, 
+                    rawBitmap.Format, 
+                    CanvasAlphaMode.Premultiplied);
+
+                using (var ds = newBitmap.CreateDrawingSession())
+                {
+                    ds.Clear(Windows.UI.Colors.Transparent);
+                    // 将原图向左上移动，相当于截取 cropRect 区域
+                    ds.DrawImage(rawBitmap, (float)-pixelRect.X, (float)-pixelRect.Y);
+                }
+                
+                // 更新 rawBitmap 引用
+                rawBitmap = newBitmap;
+
+                // 3. 更新笔迹位置
+                // 笔迹使用的是 UI 坐标系 (DisplayImage.ActualWidth x ActualHeight)
+                // 裁剪掉左上角 (X, Y)，相当于所有笔迹向左上平移 (-X, -Y)
+                var container = inkCanvas.InkPresenter.StrokeContainer;
+                var strokes = container.GetStrokes();
+                if (strokes.Count > 0)
+                {
+                    // 创建平移矩阵
+                    var translation = Matrix3x2.CreateTranslation((float)-uiCropRect.X, (float)-uiCropRect.Y);
+                    
+                    foreach (var stroke in strokes)
+                    {
+                        var transform = stroke.PointTransform;
+                        stroke.PointTransform = Matrix3x2.Multiply(transform, translation);
+                    }
+                    
+                    // 必须重新赋值 strokes 吗？InkStroke 是引用对象，修改属性应即时生效。
+                    // 但为了触发重绘，可能需要一点操作。MoveSelected 是官方推荐。
+                    // 但 InkStroke.PointTransform 文档说 "This property is read/write".
+                }
+
+                // 4. 更新显示的 Image
+                // 将新的 rawBitmap 转回 BitmapImage 以显示 (保留 HDR 能力)
+                using (var stream = new InMemoryRandomAccessStream())
+                {
+                    await rawBitmap.SaveAsync(stream, CanvasBitmapFileFormat.JpegXR);
+                    stream.Seek(0);
+                    
+                    var newImg = new BitmapImage();
+                    newImg.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                    await newImg.SetSourceAsync(stream);
+                    DisplayImage.Source = newImg;
+                }
+
+                // 5. 更新控件尺寸
+                DisplayImage.Width = uiCropRect.Width;
+                DisplayImage.Height = uiCropRect.Height;
+                inkCanvas.Width = uiCropRect.Width;
+                inkCanvas.Height = uiCropRect.Height;
+
+                // 清除裁剪控件的状态
+                // (Optional: 可以在 CropControl.Initialize 里重置)
+            }
+            catch (Exception ex)
+            {
+                System.Diagnostics.Debug.WriteLine($"Crop Error: {ex.Message}");
+            }
+        }
+
+        private void ConfirmCrop_Click(object sender, RoutedEventArgs e)
+        {
+            cropControl.Confirm();
+        }
+
+        private void CancelCrop_Click(object sender, RoutedEventArgs e)
+        {
+            cropControl.Cancel();
         }
     }
 }
