@@ -15,6 +15,7 @@
   </PropertyGroup>
   
   <ItemGroup>
+    <PackageReference Include="Microsoft.Graphics.Win2D" Version="1.0.1" />
     <PackageReference Include="Mile.Xaml" Version="2.2.890" />
   </ItemGroup>
 
