@@ -37,14 +37,15 @@ namespace MicroWinUI
         private Vector2 _velocity;
         private DateTime _lastMoveTime;
         private bool _isInertiaRendering;
-        private const double Friction = 0.88; 
+        private const double Friction = 0.88;
         private const double VelocityThreshold = 0.1;
-        
+
         public MainPage(IslandWindow coreWindow)
         {
             this.coreWindow = coreWindow;
+            coreWindow.Backdrop = IslandWindow.SystemBackdrop.Tabbed;
             this.InitializeComponent();
-            
+
             // 初始化 InkCanvas 支持的输入类型
             inkCanvas.InkPresenter.InputDeviceTypes = CoreInputDeviceTypes.Mouse | CoreInputDeviceTypes.Pen | CoreInputDeviceTypes.Touch;
 
@@ -59,15 +60,15 @@ namespace MicroWinUI
 
         private async void SaveButton_Click(object sender, RoutedEventArgs e)
         {
-             await SaveImageAsync();
+            await SaveImageAsync();
         }
-        
+
         private async Task OpenImageAsync()
         {
             try
             {
                 var picker = new FileOpenPicker();
-                
+
                 // 初始化窗口句柄
                 ((IInitializeWithWindow)(object)picker).Initialize(coreWindow.Handle);
 
@@ -87,7 +88,7 @@ namespace MicroWinUI
                         // 关键：忽略缓存，避免重复打开同一文件时属性不刷新
                         bitmapImage.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
                         await bitmapImage.SetSourceAsync(stream);
-                        
+
                         DisplayImage.Source = bitmapImage;
 
                         // 调整 InkCanvas 尺寸以匹配图片像素尺寸 (Image Stretch=None)
@@ -108,15 +109,16 @@ namespace MicroWinUI
                     {
                         var device = CanvasDevice.GetSharedDevice();
                         rawBitmap = await CanvasBitmap.LoadAsync(device, stream);
-                        
+
                         System.Diagnostics.Debug.WriteLine($"Image Loaded. Format: {rawBitmap.Format}, Size: {rawBitmap.SizeInPixels.Width}x{rawBitmap.SizeInPixels.Height}");
-                        
-                        // 清除旧笔迹
-                        inkCanvas.InkPresenter.StrokeContainer.Clear();
-                        
+
                         // 打开新图片后默认切换回抓手模式
+                        SaveButton.IsEnabled = true;
                         MainInkToolbar.IsEnabled = true;
                         EnableHandMode();
+
+                        // 清除旧笔迹
+                        inkCanvas.InkPresenter.StrokeContainer.Clear();
                     }
                 }
             }
@@ -125,7 +127,7 @@ namespace MicroWinUI
                 System.Diagnostics.Debug.WriteLine($"OpenImageAsync Error: {ex.Message}");
             }
         }
-        
+
         private async Task SaveImageAsync()
         {
             if (rawBitmap == null) return;
@@ -147,7 +149,7 @@ namespace MicroWinUI
                     using (var stream = await file.OpenAsync(FileAccessMode.ReadWrite))
                     {
                         var device = CanvasDevice.GetSharedDevice();
-                        
+
                         // 创建 RenderTarget，尺寸和 DPI 与原始图片一致
                         // 这样保存出来的图片像素尺寸才会和原图一样
                         using (var renderTarget = new CanvasRenderTarget(
@@ -163,7 +165,7 @@ namespace MicroWinUI
                                 ds.Clear(Windows.UI.Colors.Transparent);
                                 // 绘制原图
                                 ds.DrawImage(rawBitmap);
-                                
+
                                 // 绘制笔迹
                                 // 注意：InkCanvas 也是设置为 PixelWidth/Height，所以坐标系应当是一致的 (DIPs = Pixels at 96 DPI logic)
                                 // 如果 rawBitmap.Dpi 不是 96，但 InkCanvas 是按 96 布局的，可能需要 Transform。
@@ -176,7 +178,7 @@ namespace MicroWinUI
                                 // 物理像素 = SizeInPixels * (Dpi/96)。这可能会导致输出尺寸变大如果 Dpi != 96。
                                 // 为了确保 1:1 输出，我们可以强制 RenderTarget DPI = 96。
                                 // 这样 RenderTarget 的逻辑尺寸(DIPs) = 物理像素尺寸。
-                                
+
                                 // 重新创建以确保 1:1
                             }
                         }
@@ -204,7 +206,7 @@ namespace MicroWinUI
                                 using (var dsInk = inkRenderTarget.CreateDrawingSession())
                                 {
                                     dsInk.Clear(Windows.UI.Colors.Transparent);
-                                    
+
                                     // 计算缩放并应用
                                     float scaleX = (float)(rawBitmap.SizeInPixels.Width / inkCanvas.Width);
                                     float scaleY = (float)(rawBitmap.SizeInPixels.Height / inkCanvas.Height);
@@ -212,7 +214,7 @@ namespace MicroWinUI
                                     {
                                         dsInk.Transform = Matrix3x2.CreateScale(scaleX, scaleY);
                                     }
-                                    
+
                                     dsInk.DrawInk(inkCanvas.InkPresenter.StrokeContainer.GetStrokes());
                                 }
 
@@ -220,10 +222,10 @@ namespace MicroWinUI
                                 using (var ds = renderTarget.CreateDrawingSession())
                                 {
                                     ds.Clear(Windows.UI.Colors.Transparent);
-                                    
+
                                     // 绘制 HDR 原图 (直接保留 rawBitmap 数据)
                                     ds.DrawImage(rawBitmap, new Windows.Foundation.Rect(0, 0, renderTarget.Size.Width, renderTarget.Size.Height));
-                                    
+
                                     // 绘制笔迹层
                                     // 由于 inkRenderTarget 是 sRGB 的，而目标 renderTarget 是 ScRGB (Linear) 的
                                     // 我们需要进行 sRGB -> Linear 的转换，即 Gamma 2.2 扩展
@@ -233,7 +235,7 @@ namespace MicroWinUI
                                     // 为了让 sRGB 笔迹看起来和屏幕上显示的一致 (屏幕上 sRGB White 被映射到了 SdrWhiteLevel)，
                                     // 我们需要对笔迹应用增益：Gain = SdrWhiteLevel / 80。
                                     float sdrWhiteGain = 1.0f;
-                                    try 
+                                    try
                                     {
                                         var mainDisplayInfo = DisplayInformation.GetForCurrentView();
                                         var colorInfo = mainDisplayInfo.GetAdvancedColorInfo();
@@ -243,7 +245,7 @@ namespace MicroWinUI
                                         }
                                     }
                                     catch { /* Fallback to 1.0 */ }
-                                    
+
                                     // 4. 生成 sRGB -> Linear 的查找表 (Look-Up Table)
                                     // 这比简单的 Gamma 2.2 更精确，因为它遵循 sRGB 的分段函数定义
                                     float[] srgbToLinearTable = new float[256];
@@ -275,15 +277,15 @@ namespace MicroWinUI
                                         GreenTable = srgbToLinearTable,
                                         BlueTable = srgbToLinearTable,
                                         // AlphaTable 留空，默认为 Identity
-                                        ClampOutput = false 
+                                        ClampOutput = false
                                     })
                                     using (var premulEffect = new PremultiplyEffect { Source = tableEffect })
                                     {
-                                         ds.DrawImage(premulEffect);
+                                        ds.DrawImage(premulEffect);
                                     }
                                 }
                             }
-                            
+
                             await renderTarget.SaveAsync(stream, CanvasBitmapFileFormat.JpegXR);
                         }
                     }
@@ -298,15 +300,15 @@ namespace MicroWinUI
         private void CropButton_Click(object sender, RoutedEventArgs e)
         {
             if (rawBitmap == null) return;
-            
+
             // 界面状态: 开启裁剪，关闭抓手
             CropButton.IsChecked = true;
             HandToolButton.IsChecked = false;
             MainInkToolbar.ActiveTool = null;
-            
+
             // 禁用缩放以避免冲突
             MainScrollViewer.ZoomMode = ZoomMode.Disabled;
-            
+
             // 初始化并显示裁剪控件
             cropControl.Visibility = Visibility.Visible;
             CropButtonPanel.Visibility = Visibility.Visible;
@@ -318,7 +320,7 @@ namespace MicroWinUI
             cropControl.Visibility = Visibility.Collapsed;
             CropButtonPanel.Visibility = Visibility.Collapsed;
             MainScrollViewer.ZoomMode = ZoomMode.Enabled;
-            
+
             // 退出裁剪
             CropButton.IsChecked = false;
             // 恢复抓手? 由调用方决定
@@ -334,13 +336,13 @@ namespace MicroWinUI
 
                 CropButton.IsChecked = false;
                 EnableHandMode();
-                
+
                 // 1. 计算图片空间的裁剪区域
                 double scaleFactor = rawBitmap.SizeInPixels.Width / DisplayImage.ActualWidth;
                 Windows.Foundation.Rect pixelRect = new Windows.Foundation.Rect(
-                    Math.Round(uiCropRect.X * scaleFactor), 
-                    Math.Round(uiCropRect.Y * scaleFactor), 
-                    Math.Round(uiCropRect.Width * scaleFactor), 
+                    Math.Round(uiCropRect.X * scaleFactor),
+                    Math.Round(uiCropRect.Y * scaleFactor),
+                    Math.Round(uiCropRect.Width * scaleFactor),
                     Math.Round(uiCropRect.Height * scaleFactor));
 
                 var device = CanvasDevice.GetSharedDevice();
@@ -348,11 +350,11 @@ namespace MicroWinUI
                 // 2. 裁剪图片 (创建新的 rawBitmap)
                 // 使用 RenderTarget 绘制原图的指定区域到新画布
                 var newBitmap = new CanvasRenderTarget(
-                    device, 
-                    (float)pixelRect.Width, 
-                    (float)pixelRect.Height, 
-                    rawBitmap.Dpi, 
-                    rawBitmap.Format, 
+                    device,
+                    (float)pixelRect.Width,
+                    (float)pixelRect.Height,
+                    rawBitmap.Dpi,
+                    rawBitmap.Format,
                     CanvasAlphaMode.Premultiplied);
 
                 using (var ds = newBitmap.CreateDrawingSession())
@@ -361,7 +363,7 @@ namespace MicroWinUI
                     // 将原图向左上移动，相当于截取 cropRect 区域
                     ds.DrawImage(rawBitmap, (float)-pixelRect.X, (float)-pixelRect.Y);
                 }
-                
+
                 // 更新 rawBitmap 引用
                 rawBitmap = newBitmap;
 
@@ -374,13 +376,13 @@ namespace MicroWinUI
                 {
                     // 创建平移矩阵
                     var translation = Matrix3x2.CreateTranslation((float)-uiCropRect.X, (float)-uiCropRect.Y);
-                    
+
                     foreach (var stroke in strokes)
                     {
                         var transform = stroke.PointTransform;
                         stroke.PointTransform = Matrix3x2.Multiply(transform, translation);
                     }
-                    
+
                     // 必须重新赋值 strokes 吗？InkStroke 是引用对象，修改属性应即时生效。
                     // 但为了触发重绘，可能需要一点操作。MoveSelected 是官方推荐。
                     // 但 InkStroke.PointTransform 文档说 "This property is read/write".
@@ -392,7 +394,7 @@ namespace MicroWinUI
                 {
                     await rawBitmap.SaveAsync(stream, CanvasBitmapFileFormat.JpegXR);
                     stream.Seek(0);
-                    
+
                     var newImg = new BitmapImage();
                     newImg.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
                     await newImg.SetSourceAsync(stream);
@@ -435,7 +437,7 @@ namespace MicroWinUI
 
             _isHandMode = true;
             inkCanvas.InkPresenter.IsInputEnabled = false;
-            
+
             HandToolButton.IsChecked = true;
             CropButton.IsChecked = false;
             MainInkToolbar.ActiveTool = null;
@@ -478,11 +480,11 @@ namespace MicroWinUI
             {
                 // 停止惯性滚动
                 StopInertia();
-                
+
                 _lastDragPoint = e.GetCurrentPoint(MainScrollViewer).Position;
                 _velocity = Vector2.Zero;
                 _lastMoveTime = DateTime.Now;
-                
+
                 (sender as UIElement).CapturePointer(e.Pointer);
                 e.Handled = true;
             }
@@ -496,10 +498,10 @@ namespace MicroWinUI
             {
                 var currentPoint = e.GetCurrentPoint(MainScrollViewer).Position;
                 var currentTime = DateTime.Now;
-                
+
                 double deltaX = currentPoint.X - _lastDragPoint.Value.X;
                 double deltaY = currentPoint.Y - _lastDragPoint.Value.Y;
-                
+
                 // 计算瞬时速度 (pixels / ms)
                 double dt = (currentTime - _lastMoveTime).TotalMilliseconds;
                 if (dt > 0)
@@ -508,7 +510,7 @@ namespace MicroWinUI
                 }
 
                 MainScrollViewer.ChangeView(MainScrollViewer.HorizontalOffset - deltaX, MainScrollViewer.VerticalOffset - deltaY, null, true);
-                
+
                 _lastDragPoint = currentPoint;
                 _lastMoveTime = currentTime;
                 e.Handled = true;
@@ -522,7 +524,7 @@ namespace MicroWinUI
                 _lastDragPoint = null;
                 (sender as UIElement).ReleasePointerCapture(e.Pointer);
                 e.Handled = true;
-                
+
                 // 如果用户在释放前停留了超过 50ms，认为是有意停止，不进行惯性
                 if ((DateTime.Now - _lastMoveTime).TotalMilliseconds > 50)
                 {
@@ -559,8 +561,8 @@ namespace MicroWinUI
         {
             // 简单物理模拟: 速度衰减与位移更新
             // 假设帧率为 60fps, dt ~ 16.6ms
-            double dt = 16.6; 
-            
+            double dt = 16.6;
+
             double dX = _velocity.X * dt;
             double dY = _velocity.Y * dt;
 
@@ -569,7 +571,7 @@ namespace MicroWinUI
             _velocity *= (float)Friction;
 
             // 当速度极小时停止
-            if (_velocity.LengthSquared() < 0.001) 
+            if (_velocity.LengthSquared() < 0.001)
             {
                 StopInertia();
             }

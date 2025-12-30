@@ -17,6 +17,9 @@ namespace MicroWinUI
         private double _imageHeight;
         private Rect _currentRect;
         private const double MinSize = 50;
+        private bool _isDragging = false;
+        private Point _lastDragPoint;
+
 
         public CropControl()
         {
@@ -71,43 +74,66 @@ namespace MicroWinUI
             Canvas.SetLeft(RightMask, _currentRect.Right);
             Canvas.SetTop(RightMask, _currentRect.Top);
 
-            // 更新手柄位置
-            UpdateThumbPosition("TL", _currentRect.Left, _currentRect.Top);
-            UpdateThumbPosition("T", _currentRect.Left + _currentRect.Width / 2, _currentRect.Top);
-            UpdateThumbPosition("TR", _currentRect.Right, _currentRect.Top);
-            UpdateThumbPosition("R", _currentRect.Right, _currentRect.Top + _currentRect.Height / 2);
-            UpdateThumbPosition("BR", _currentRect.Right, _currentRect.Bottom);
-            UpdateThumbPosition("B", _currentRect.Left + _currentRect.Width / 2, _currentRect.Bottom);
-            UpdateThumbPosition("BL", _currentRect.Left, _currentRect.Bottom);
-            UpdateThumbPosition("L", _currentRect.Left, _currentRect.Top + _currentRect.Height / 2);
+            // 更新手柄位置 (直接使用命名控件)
+            SetThumb(ThumbTL, _currentRect.Left, _currentRect.Top);
+            SetThumb(ThumbT, _currentRect.Left + _currentRect.Width / 2, _currentRect.Top);
+            SetThumb(ThumbTR, _currentRect.Right, _currentRect.Top);
+            SetThumb(ThumbR, _currentRect.Right, _currentRect.Top + _currentRect.Height / 2);
+            SetThumb(ThumbBR, _currentRect.Right, _currentRect.Bottom);
+            SetThumb(ThumbB, _currentRect.Left + _currentRect.Width / 2, _currentRect.Bottom);
+            SetThumb(ThumbBL, _currentRect.Left, _currentRect.Bottom);
+            SetThumb(ThumbL, _currentRect.Left, _currentRect.Top + _currentRect.Height / 2);
         }
 
-        private void UpdateThumbPosition(string tag, double x, double y)
+        private void SetThumb(Thumb thumb, double x, double y)
         {
-            foreach (var child in ((Canvas)SelectionBorder.Parent).Children)
+            // 如果 Width 未设置 (NaN)，默认 20
+            double w = double.IsNaN(thumb.Width) ? 20 : thumb.Width;
+            double h = double.IsNaN(thumb.Height) ? 20 : thumb.Height;
+            Canvas.SetLeft(thumb, x - w / 2);
+            Canvas.SetTop(thumb, y - h / 2);
+        }
+
+        private void SelectionBorder_PointerPressed(object sender, PointerRoutedEventArgs e)
+        {
+            _isDragging = true;
+            // 捕获相对于 LayoutRoot (或 Canvas) 的位置
+            _lastDragPoint = e.GetCurrentPoint(this.Content as UIElement).Position;
+            (sender as UIElement).CapturePointer(e.Pointer);
+            e.Handled = true;
+        }
+
+        private void SelectionBorder_PointerMoved(object sender, PointerRoutedEventArgs e)
+        {
+            if (_isDragging)
             {
-                if (child is Thumb thumb && (string)thumb.Tag == tag)
-                {
-                    Canvas.SetLeft(thumb, x - thumb.Width / 2);
-                    Canvas.SetTop(thumb, y - thumb.Height / 2);
-                    break;
-                }
+                var cur = e.GetCurrentPoint(this.Content as UIElement).Position;
+                double dx = cur.X - _lastDragPoint.X;
+                double dy = cur.Y - _lastDragPoint.Y;
+
+                double newX = _currentRect.X + dx;
+                double newY = _currentRect.Y + dy;
+
+                newX = Math.Max(0, Math.Min(newX, _imageWidth - _currentRect.Width));
+                newY = Math.Max(0, Math.Min(newY, _imageHeight - _currentRect.Height));
+
+                _currentRect.X = newX;
+                _currentRect.Y = newY;
+                UpdateVisuals();
+
+                _lastDragPoint = cur;
+                e.Handled = true;
             }
         }
 
-        private void Selection_ManipulationDelta(object sender, ManipulationDeltaRoutedEventArgs e)
+        private void SelectionBorder_PointerReleased(object sender, PointerRoutedEventArgs e)
         {
-            double newX = _currentRect.X + e.Delta.Translation.X;
-            double newY = _currentRect.Y + e.Delta.Translation.Y;
-
-            // 边界检查
-            newX = Math.Max(0, Math.Min(newX, _imageWidth - _currentRect.Width));
-            newY = Math.Max(0, Math.Min(newY, _imageHeight - _currentRect.Height));
-
-            _currentRect.X = newX;
-            _currentRect.Y = newY;
-            UpdateVisuals();
-            e.Handled = true;
+            if (_isDragging)
+            {
+                _isDragging = false;
+                (sender as UIElement).ReleasePointerCapture(e.Pointer);
+                e.Handled = true;
+            }
         }
 
         private void Thumb_DragDelta(object sender, DragDeltaEventArgs e)

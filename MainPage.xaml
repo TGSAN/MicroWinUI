@@ -17,7 +17,7 @@
 
         <CommandBar DefaultLabelPosition="Right">
             <AppBarButton Icon="OpenFile" Label="打开" Click="OpenButton_Click"/>
-            <AppBarButton Icon="Save" Label="保存" Click="SaveButton_Click"/>
+            <AppBarButton x:Name="SaveButton" Icon="Save" Label="保存" Click="SaveButton_Click" IsEnabled="False"/>
         </CommandBar>
 
         <InkToolbar x:Name="MainInkToolbar" TargetInkCanvas="{x:Bind inkCanvas}" Grid.Row="1" ActiveToolChanged="InkToolbar_ActiveToolChanged" IsEnabled="False">
@@ -29,7 +29,7 @@
             </InkToolbarCustomToggleButton>
         </InkToolbar>
 
-        <Grid Grid.Row="2" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
+        <Grid Grid.Row="2" Background="{ThemeResource LayerOnAcrylicFillColorDefaultBrush}">
             <ScrollViewer x:Name="MainScrollViewer" 
                           HorizontalScrollBarVisibility="Auto" 
                           VerticalScrollBarVisibility="Auto" 
