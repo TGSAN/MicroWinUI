@@ -20,14 +20,27 @@
             <AppBarButton Icon="Save" Label="保存" Click="SaveButton_Click"/>
         </CommandBar>
 
-        <InkToolbar TargetInkCanvas="{x:Bind inkCanvas}" Grid.Row="1">
+        <InkToolbar x:Name="MainInkToolbar" TargetInkCanvas="{x:Bind inkCanvas}" Grid.Row="1" ActiveToolChanged="InkToolbar_ActiveToolChanged">
+            <InkToolbarCustomToolButton x:Name="HandToolButton" Click="HandToolButton_Click" ToolTipService.ToolTip="抓手工具">
+                <FontIcon Glyph="&#xE7C9;"/>
+            </InkToolbarCustomToolButton>
             <InkToolbarCustomToolButton x:Name="CropButton" Click="CropButton_Click" ToolTipService.ToolTip="裁剪">
-                <SymbolIcon Symbol="Crop"/>
+                <FontIcon Glyph="&#xE7A8;"/>
             </InkToolbarCustomToolButton>
         </InkToolbar>
 
         <Grid Grid.Row="2" Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-            <ScrollViewer x:Name="MainScrollViewer" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" ZoomMode="Enabled" MinZoomFactor="0.1" MaxZoomFactor="5.0">
+            <ScrollViewer x:Name="MainScrollViewer" 
+                          HorizontalScrollBarVisibility="Auto" 
+                          VerticalScrollBarVisibility="Auto" 
+                          ZoomMode="Enabled" 
+                          MinZoomFactor="0.1" 
+                          MaxZoomFactor="5.0"
+                          PointerPressed="MainScrollViewer_PointerPressed"
+                          PointerMoved="MainScrollViewer_PointerMoved"
+                          PointerReleased="MainScrollViewer_PointerReleased"
+                          PointerCanceled="MainScrollViewer_PointerReleased"
+                          PointerWheelChanged="MainScrollViewer_PointerWheelChanged">
                 <Grid x:Name="ImageGrid" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Image x:Name="DisplayImage" Stretch="Fill" UseLayoutRounding="True" />
                     <InkCanvas x:Name="inkCanvas" />

@@ -31,6 +31,8 @@ namespace MicroWinUI
     {
         private IslandWindow coreWindow;
         private CanvasBitmap rawBitmap; // 用于保存的原始数据
+        private bool _isHandMode = false;
+        private Windows.Foundation.Point? _lastDragPoint;
         
         public MainPage(IslandWindow coreWindow)
         {
@@ -39,6 +41,9 @@ namespace MicroWinUI
             
             // 初始化 InkCanvas 支持的输入类型
             inkCanvas.InkPresenter.InputDeviceTypes = CoreInputDeviceTypes.Mouse | CoreInputDeviceTypes.Pen | CoreInputDeviceTypes.Touch;
+
+            // 默认启用抓手模式
+            Loaded += (s, e) => EnableHandMode();
         }
 
         private async void OpenButton_Click(object sender, RoutedEventArgs e)
@@ -102,6 +107,9 @@ namespace MicroWinUI
                         
                         // 清除旧笔迹
                         inkCanvas.InkPresenter.StrokeContainer.Clear();
+                        
+                        // 打开新图片后默认切换回抓手模式，方便浏览
+                        EnableHandMode();
                     }
                 }
             }
@@ -395,6 +403,80 @@ namespace MicroWinUI
         private void CancelCrop_Click(object sender, RoutedEventArgs e)
         {
             cropControl.Cancel();
+        }
+
+        private void EnableHandMode()
+        {
+            _isHandMode = true;
+            inkCanvas.InkPresenter.IsInputEnabled = false;
+            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Hand, 1);
+        }
+
+        private void EnableInkMode()
+        {
+            _isHandMode = false;
+            inkCanvas.InkPresenter.IsInputEnabled = true;
+            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0);
+        }
+
+        private void HandToolButton_Click(object sender, RoutedEventArgs e)
+        {
+            EnableHandMode();
+        }
+
+        private void InkToolbar_ActiveToolChanged(InkToolbar sender, object args)
+        {
+            // 如果切换到了内置画笔 (Pen, Pencil 等)，则退出抓手模式
+            if (sender.ActiveTool != null && sender.ActiveTool != HandToolButton)
+            {
+                EnableInkMode();
+            }
+        }
+
+        private void MainScrollViewer_PointerPressed(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (_isHandMode)
+            {
+                _lastDragPoint = e.GetCurrentPoint(MainScrollViewer).Position;
+                Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Hand, 1);
+                (sender as UIElement).CapturePointer(e.Pointer);
+                e.Handled = true;
+            }
+        }
+
+        private void MainScrollViewer_PointerMoved(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (_isHandMode && _lastDragPoint.HasValue)
+            {
+                var currentPoint = e.GetCurrentPoint(MainScrollViewer).Position;
+                double deltaX = currentPoint.X - _lastDragPoint.Value.X;
+                double deltaY = currentPoint.Y - _lastDragPoint.Value.Y;
+
+                MainScrollViewer.ChangeView(MainScrollViewer.HorizontalOffset - deltaX, MainScrollViewer.VerticalOffset - deltaY, null, true);
+                _lastDragPoint = currentPoint;
+                e.Handled = true;
+            }
+        }
+
+        private void MainScrollViewer_PointerReleased(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (_isHandMode)
+            {
+                _lastDragPoint = null;
+                (sender as UIElement).ReleasePointerCapture(e.Pointer);
+                e.Handled = true;
+            }
+        }
+
+        private void MainScrollViewer_PointerWheelChanged(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            var keyState = Window.Current.CoreWindow.GetKeyState(Windows.System.VirtualKey.Shift);
+            if ((keyState & CoreVirtualKeyStates.Down) == CoreVirtualKeyStates.Down)
+            {
+                var delta = e.GetCurrentPoint(MainScrollViewer).Properties.MouseWheelDelta;
+                MainScrollViewer.ChangeView(MainScrollViewer.HorizontalOffset - delta, null, null);
+                e.Handled = true;
+            }
         }
     }
 }
