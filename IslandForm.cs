@@ -277,9 +277,10 @@ namespace MicroWinUICore
 
         public bool IsAppDarkMode()
         {
-            var foreground = uiSettings.GetColorValue(UIColorType.Foreground);
-            bool isDark = IsColorLight(foreground);
-            return isDark;
+            //var foreground = uiSettings.GetColorValue(UIColorType.Foreground);
+            //bool isDark = IsColorLight(foreground);
+            //return isDark;
+            return true;
         }
 
         public bool IsColorPrevalence()

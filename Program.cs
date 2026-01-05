@@ -15,9 +15,9 @@ namespace MicroWinUICore
             App app = new();
 
             var window = new IslandWindow();
-            window.Content = new MainPage(window);
+            window.Content = new CodePage(window);
             window.ClientSize = new System.Drawing.Size(1280, 720);
-            window.Text = "App";
+            window.Text = "毒蘑菇 Native Xbox";
             window.ShowIcon = false;
 
             Application.Run(window);

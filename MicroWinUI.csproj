@@ -11,11 +11,24 @@
     <!-- Add workaround for WinRT support in the old .NET SDK -->
     <SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
     <PlatformTarget>AnyCPU</PlatformTarget>
-	<MileXamlNoSunValleyXamlStyle>false</MileXamlNoSunValleyXamlStyle>
+	<MileXamlNoSunValleyXamlStyle>true</MileXamlNoSunValleyXamlStyle>
   </PropertyGroup>
   
   <ItemGroup>
+    <PackageReference Include="Costura.Fody" Version="3.3.3" />
     <PackageReference Include="Mile.Xaml" Version="2.5.1250" />
+    <PackageReference Include="SharpDX" Version="4.2.0" />
+    <PackageReference Include="SharpDX.D3DCompiler" Version="4.2.0" />
+    <PackageReference Include="SharpDX.Direct3D12" Version="4.2.0" />
+    <PackageReference Include="SharpDX.Mathematics" Version="4.2.0" />
+  </ItemGroup>
+  
+  <ItemGroup>
+    <Compile Update="Resources.Designer.cs">
+      <DesignTime>True</DesignTime>
+      <AutoGen>True</AutoGen>
+      <DependentUpon>Resources.resx</DependentUpon>
+    </Compile>
   </ItemGroup>
 
 </Project>
