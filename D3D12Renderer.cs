@@ -1,14 +1,17 @@
-using MicroWinUI;
+using System;
+using System.Threading;
+using System.Threading.Tasks;
+using Windows.UI.Xaml.Controls;
 using SharpDX;
 using SharpDX.Direct3D12;
 using SharpDX.DXGI;
 using SharpDX.Mathematics.Interop;
-using System;
-using System.Text;
-using System.Threading;
-using Windows.UI.Xaml.Controls;
 using Device = SharpDX.Direct3D12.Device;
 using Resource = SharpDX.Direct3D12.Resource;
+using SharpDX.D3DCompiler;
+using Windows.ApplicationModel;
+using System.Text;
+using MicroWinUI;
 
 namespace HelloXbox
 {
@@ -54,14 +57,15 @@ namespace HelloXbox
 
         // Viewport parameters
         private float _vpX, _vpY, _vpWidth, _vpHeight;
+        private bool _allowTearing = false;
 
         private Resource _vertexBuffer;
         private VertexBufferView _vertexBufferView;
-        
+
         // Constant Buffer
         private Resource _constantBuffer;
         private IntPtr _constantBufferPtr;
-        
+
         // Camera State
         // Camera State
         public float Len { get; set; } = 1.6f;
@@ -70,8 +74,11 @@ namespace HelloXbox
         public float CenX { get; set; } = 0.0f;
         public float CenY { get; set; } = 0.0f;
         public float CenZ { get; set; } = 0.0f;
+        public bool VSync { get; set; } = false; // Default off
 
         private int _adapterIndex = 0;
+
+
 
         public static System.Collections.Generic.List<string> GetHardwareAdapters()
         {
@@ -104,7 +111,7 @@ namespace HelloXbox
             // Fixed render resolution as requested
             var width = 1024;
             var height = 1024;
-            
+
             _vpX = 0;
             _vpY = 0;
             _vpWidth = width;
@@ -112,7 +119,7 @@ namespace HelloXbox
 
             _scissorRect = new Rectangle(0, 0, width, height);
 
- #if DEBUG
+#if DEBUG
             //try
             //{
             //    using (var debug = SharpDX.Direct3D12.DebugInterface.Get())
@@ -128,6 +135,27 @@ namespace HelloXbox
 
             using (var factory = new Factory4())
             {
+                // Check for Tearing Support
+                try
+                {
+                    using (var factory5 = factory.QueryInterface<Factory5>())
+                    {
+                        var allowTearing = false;
+                        unsafe
+                        {
+                            // Feature support data for PresentAllowTearing is just a BOOL (4 bytes)
+                            int isSupported = 0;
+                            factory5.CheckFeatureSupport(SharpDX.DXGI.Feature.PresentAllowTearing, new IntPtr(&isSupported), sizeof(int));
+                            allowTearing = isSupported != 0;
+                        }
+                        _allowTearing = allowTearing;
+                    }
+                }
+                catch
+                {
+                    _allowTearing = false;
+                }
+
                 // Select specific adapter
                 var adapter = factory.Adapters[_adapterIndex];
                 _device = new Device(adapter, SharpDX.Direct3D.FeatureLevel.Level_11_0);
@@ -142,17 +170,17 @@ namespace HelloXbox
 
                 var swapChainDesc1 = new SwapChainDescription1()
                 {
-                     Width = width,
-                     Height = height,
-                     Format = Format.R8G8B8A8_UNorm,
-                     Stereo = false,
-                     SampleDescription = new SampleDescription(1, 0),
-                     Usage = Usage.RenderTargetOutput,
-                     BufferCount = FrameCount,
-                     Scaling = Scaling.Stretch,
-                     SwapEffect = SwapEffect.FlipDiscard,
-                     AlphaMode = AlphaMode.Ignore,
-                     Flags = SwapChainFlags.None
+                    Width = width,
+                    Height = height,
+                    Format = Format.R8G8B8A8_UNorm,
+                    Stereo = false,
+                    SampleDescription = new SampleDescription(1, 0),
+                    Usage = Usage.RenderTargetOutput,
+                    BufferCount = FrameCount,
+                    Scaling = Scaling.Stretch,
+                    SwapEffect = SwapEffect.FlipDiscard,
+                    AlphaMode = AlphaMode.Ignore,
+                    Flags = _allowTearing ? SwapChainFlags.AllowTearing : SwapChainFlags.None
                 };
 
                 using (var nativePanel = new SharpDX.ComObject(_swapChainPanel))
@@ -192,19 +220,19 @@ namespace HelloXbox
         {
             // Root Signature with 1 Constant Buffer View (Root Descriptor)
             var rootParameter = new RootParameter(ShaderVisibility.All, new RootDescriptor(0, 0), RootParameterType.ConstantBufferView);
-            var rootSignatureDesc = new RootSignatureDescription(RootSignatureFlags.AllowInputAssemblerInputLayout, new [] { rootParameter });
+            var rootSignatureDesc = new RootSignatureDescription(RootSignatureFlags.AllowInputAssemblerInputLayout, new[] { rootParameter });
             _rootSignature = _device.CreateRootSignature(rootSignatureDesc.Serialize());
 
             // Load shaders
             var shaderBytes = Resources.Shaders;
             var shaderSource = Encoding.UTF8.GetString(shaderBytes);
-            
+
             var vertexShaderResult = SharpDX.D3DCompiler.ShaderBytecode.Compile(shaderSource, "VSMain", "vs_5_0");
             var pixelShaderResult = SharpDX.D3DCompiler.ShaderBytecode.Compile(shaderSource, "PSMain", "ps_5_0");
             var vertexShader = new SharpDX.Direct3D12.ShaderBytecode(vertexShaderResult.Bytecode);
             var pixelShader = new SharpDX.Direct3D12.ShaderBytecode(pixelShaderResult.Bytecode);
 
-            var inputElementDescs = new []
+            var inputElementDescs = new[]
             {
                 new InputElement("POSITION", 0, Format.R32G32B32_Float, 0, 0),
                 new InputElement("TEXCOORD", 0, Format.R32G32_Float, 12, 0)
@@ -247,7 +275,7 @@ namespace HelloXbox
                 new Vertex() { Position = new Vector3(1.0f,  1.0f, 0.0f), TexCoord = new Vector2(1.0f, 0.0f) },
                 new Vertex() { Position = new Vector3(-1.0f,  1.0f, 0.0f), TexCoord = new Vector2(0.0f, 0.0f) }
             };
-            
+
             int vertexBufferSize = Utilities.SizeOf(vertices);
             _vertexBuffer = _device.CreateCommittedResource(
                 new HeapProperties(HeapType.Upload),
@@ -295,25 +323,25 @@ namespace HelloXbox
             float cy = _vpHeight;
             // Avoid divide by zero
             if (cx + cy == 0) { cx = 1; cy = 1; }
-            
+
             float aspectX = cx * 2.0f / (cx + cy);
             float aspectY = cy * 2.0f / (cx + cy);
-            
+
             float cosAng1 = (float)Math.Cos(Ang1);
             float sinAng1 = (float)Math.Sin(Ang1);
             float cosAng2 = (float)Math.Cos(Ang2);
             float sinAng2 = (float)Math.Sin(Ang2);
-            
+
             Vector3 origin = new Vector3(
                 Len * cosAng1 * cosAng2 + CenX,
                 Len * sinAng2 + CenY,
                 Len * sinAng1 * cosAng2 + CenZ
             );
-            
+
             Vector3 right = new Vector3(sinAng1, 0, -cosAng1);
             Vector3 up = new Vector3(-sinAng2 * cosAng1, cosAng2, -sinAng2 * sinAng1);
             Vector3 forward = new Vector3(-cosAng1 * cosAng2, -sinAng2, -sinAng1 * cosAng2);
-            
+
             var cbData = new SceneConstantBuffer
             {
                 Right = new Vector4(right, 0),
@@ -325,21 +353,25 @@ namespace HelloXbox
                 Y = aspectY,
                 Padding = 0
             };
-            
+
             Utilities.Write(_constantBufferPtr, ref cbData);
 
             _commandAllocator.Reset();
             _commandList.Reset(_commandAllocator, _pipelineState);
 
             _commandList.SetGraphicsRootSignature(_rootSignature);
-            
+
             // Set Constant Buffer View (Root Descriptor)
             _commandList.SetGraphicsRootConstantBufferView(0, _constantBuffer.GPUVirtualAddress);
-            
-            var viewport = new RawViewportF 
-            { 
-                 X = _vpX, Y = _vpY, Width = _vpWidth, Height = _vpHeight, 
-                 MinDepth = 0.0f, MaxDepth = 1.0f 
+
+            var viewport = new RawViewportF
+            {
+                X = _vpX,
+                Y = _vpY,
+                Width = _vpWidth,
+                Height = _vpHeight,
+                MinDepth = 0.0f,
+                MaxDepth = 1.0f
             };
             _commandList.SetViewport(viewport);
 
@@ -347,9 +379,9 @@ namespace HelloXbox
 
             var rtvHandle = _rtvHeap.CPUDescriptorHandleForHeapStart;
             rtvHandle += _frameIndex * _rtvDescriptorSize;
-            
+
             _commandList.ResourceBarrierTransition(_renderTargets[_frameIndex], ResourceStates.Present, ResourceStates.RenderTarget);
-            
+
             _commandList.SetRenderTargets(rtvHandle, null);
             _commandList.ClearRenderTargetView(rtvHandle, new Color4(0.0f, 0.2f, 0.4f, 1.0f), 0, null);
 
@@ -363,8 +395,18 @@ namespace HelloXbox
             _commandList.Close();
 
             _commandQueue.ExecuteCommandList(_commandList);
+            // VSync Logic
+            // If VSync is ON: SyncInterval = 1, Flags = None
+            // If VSync is OFF and Tearing Supported: SyncInterval = 0, Flags = AllowTearing
+            // If VSync is OFF and Tearing Not Supported: SyncInterval = 0, Flags = None
+            int syncInterval = VSync ? 1 : 0;
+            PresentFlags presentFlags = PresentFlags.None;
+            if (!VSync && _allowTearing)
+            {
+                presentFlags |= PresentFlags.AllowTearing;
+            }
 
-            _swapChain.Present(1, PresentFlags.None);
+            _swapChain.Present(syncInterval, presentFlags);
 
             WaitForPreviousFrame();
         }
@@ -383,10 +425,10 @@ namespace HelloXbox
 
             _frameIndex = _swapChain.CurrentBackBufferIndex;
         }
-        
+
         public void OnResize()
         {
-             // TODO implementation for next phase
+            // TODO implementation for next phase
         }
 
         public void Dispose()
@@ -394,19 +436,19 @@ namespace HelloXbox
             WaitForPreviousFrame();
             _swapChainPanel = null;
             // Dispose all DX objects
-             _fence.Dispose();
-             _rootSignature.Dispose();
-             _pipelineState.Dispose();
-             _commandList.Dispose();
-             _commandAllocator.Dispose();
-             _vertexBuffer.Dispose();
-             _constantBuffer.Unmap(0);
-             _constantBuffer.Dispose();
-             _rtvHeap.Dispose();
-             foreach(var rt in _renderTargets) rt.Dispose();
-             _swapChain.Dispose();
-             _commandQueue.Dispose();
-             _device.Dispose();
+            _fence.Dispose();
+            _rootSignature.Dispose();
+            _pipelineState.Dispose();
+            _commandList.Dispose();
+            _commandAllocator.Dispose();
+            _vertexBuffer.Dispose();
+            _constantBuffer.Unmap(0);
+            _constantBuffer.Dispose();
+            _rtvHeap.Dispose();
+            foreach (var rt in _renderTargets) rt.Dispose();
+            _swapChain.Dispose();
+            _commandQueue.Dispose();
+            _device.Dispose();
         }
     }
 }

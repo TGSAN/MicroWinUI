@@ -12,6 +12,7 @@
     <SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
     <PlatformTarget>AnyCPU</PlatformTarget>
 	<MileXamlNoSunValleyXamlStyle>true</MileXamlNoSunValleyXamlStyle>
+	<AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
   
   <ItemGroup>

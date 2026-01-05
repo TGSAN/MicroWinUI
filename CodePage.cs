@@ -19,6 +19,8 @@ namespace MicroWinUI
 
         public CheckBox AutoRotateCheck { get; private set; }
 
+        public CheckBox VSyncCheck { get; private set; }
+
         public TextBlock FpsText { get; private set; }
 
         private void InitializeComponent()
@@ -35,7 +37,6 @@ namespace MicroWinUI
 
             SwapChainPanel = new SwapChainPanel
             {
-                Name = "SwapChainPanel",
                 Width = 1024,
                 Height = 1024
             };
@@ -54,7 +55,6 @@ namespace MicroWinUI
 
             GpuComboBox = new ComboBox
             {
-                Name = "GpuComboBox",
                 Width = 320,
                 Margin = new Thickness(0, 0, 0, 10)
             };
@@ -63,7 +63,6 @@ namespace MicroWinUI
 
             ToggleBtn = new Button
             {
-                Name = "ToggleBtn",
                 Content = "Start"
             };
             ToggleBtn.Click += ToggleBtn_Click;
@@ -71,12 +70,20 @@ namespace MicroWinUI
 
             AutoRotateCheck = new CheckBox
             {
-                Name = "AutoRotateCheck",
                 Content = "Auto Rotate",
                 IsChecked = true,
                 Margin = new Thickness(0, 10, 0, 0)
             };
             leftPanel.Children.Add(AutoRotateCheck);
+
+            VSyncCheck = new CheckBox
+            {
+                Content = "V-Sync",
+                IsChecked = false,
+                Margin = new Thickness(0, 10, 0, 0)
+            };
+            VSyncCheck.Click += VSyncCheck_Click;
+            leftPanel.Children.Add(VSyncCheck);
 
             rootGrid.Children.Add(leftPanel);
 
@@ -100,6 +107,14 @@ namespace MicroWinUI
             rootGrid.Children.Add(rightPanel);
 
             Content = rootGrid;
+        }
+
+        private void VSyncCheck_Click(object sender, RoutedEventArgs e)
+        {
+            if (_renderer != null)
+            {
+                _renderer.VSync = VSyncCheck.IsChecked == true;
+            }
         }
 
         // Designer End
@@ -134,6 +149,12 @@ namespace MicroWinUI
             if (adapters.Count > 0)
             {
                 GpuComboBox.SelectedIndex = 0; // This will trigger SelectionChanged and create the renderer
+            }
+
+            // Sync initial state if renderer created
+            if (_renderer != null)
+            {
+                _renderer.VSync = VSyncCheck.IsChecked == true;
             }
         }
 
