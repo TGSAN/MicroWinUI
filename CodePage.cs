@@ -74,6 +74,8 @@ namespace MicroWinUI
                 IsChecked = true,
                 Margin = new Thickness(0, 10, 0, 0)
             };
+            AutoRotateCheck.Click += (s, e) => _autoRotate = AutoRotateCheck.IsChecked == true;
+            _autoRotate = AutoRotateCheck.IsChecked == true;
             leftPanel.Children.Add(AutoRotateCheck);
 
             VSyncCheck = new CheckBox
@@ -128,7 +130,9 @@ namespace MicroWinUI
         }
 
         private D3D12Renderer _renderer;
-        private bool _isRendering = false;
+        private volatile bool _isRendering = false;
+        private volatile bool _autoRotate = true;
+        private object _rendererLock = new object();
 
         // Input State
         private bool _isLeftPressed = false;
@@ -166,35 +170,38 @@ namespace MicroWinUI
             float len = 1.6f, ang1 = 2.8f, ang2 = 0.4f;
             float cenx = 0, ceny = 0, cenz = 0;
 
-            if (_renderer != null)
+            lock (_rendererLock)
             {
-                len = _renderer.Len;
-                ang1 = _renderer.Ang1;
-                ang2 = _renderer.Ang2;
-                cenx = _renderer.CenX;
-                ceny = _renderer.CenY;
-                cenz = _renderer.CenZ;
+                if (_renderer != null)
+                {
+                    len = _renderer.Len;
+                    ang1 = _renderer.Ang1;
+                    ang2 = _renderer.Ang2;
+                    cenx = _renderer.CenX;
+                    ceny = _renderer.CenY;
+                    cenz = _renderer.CenZ;
 
-                _renderer.Dispose();
-                _renderer = null;
-            }
+                    _renderer.Dispose();
+                    _renderer = null;
+                }
 
-            try
-            {
-                _renderer = new D3D12Renderer(SwapChainPanel, GpuComboBox.SelectedIndex);
+                try
+                {
+                    _renderer = new D3D12Renderer(SwapChainPanel, GpuComboBox.SelectedIndex);
 
-                // Restore state
-                _renderer.Len = len;
-                _renderer.Ang1 = ang1;
-                _renderer.Ang2 = ang2;
-                _renderer.CenX = cenx;
-                _renderer.CenY = ceny;
-                _renderer.CenZ = cenz;
-            }
-            catch (Exception ex)
-            {
-                // Fallback or error logging could go here
-                System.Diagnostics.Debug.WriteLine(ex.Message);
+                    // Restore state
+                    _renderer.Len = len;
+                    _renderer.Ang1 = ang1;
+                    _renderer.Ang2 = ang2;
+                    _renderer.CenX = cenx;
+                    _renderer.CenY = ceny;
+                    _renderer.CenZ = cenz;
+                }
+                catch (Exception ex)
+                {
+                    // Fallback or error logging could go here
+                    System.Diagnostics.Debug.WriteLine(ex.Message);
+                }
             }
         }
 
@@ -252,8 +259,13 @@ namespace MicroWinUI
 
         private void MainPage_Unloaded(object sender, RoutedEventArgs e)
         {
-            _renderer?.Dispose();
-            CompositionTarget.Rendering -= CompositionTarget_Rendering;
+            _isRendering = false;
+            lock (_rendererLock)
+            {
+                _renderer?.Dispose();
+                _renderer = null;
+            }
+            //CompositionTarget.Rendering -= CompositionTarget_Rendering;
             SwapChainPanel.PointerPressed -= SwapChainPanel_PointerPressed;
             SwapChainPanel.PointerReleased -= SwapChainPanel_PointerReleased;
             SwapChainPanel.PointerMoved -= SwapChainPanel_PointerMoved;
@@ -268,37 +280,55 @@ namespace MicroWinUI
 
             if (_isRendering)
             {
-                CompositionTarget.Rendering += CompositionTarget_Rendering;
+                // Start background rendering
+                System.Threading.Tasks.Task.Factory.StartNew(RenderLoop, System.Threading.Tasks.TaskCreationOptions.LongRunning);
             }
             else
             {
-                CompositionTarget.Rendering -= CompositionTarget_Rendering;
+                // Loop will stop because _isRendering is false
             }
         }
 
         private DateTime _lastFpsUpdate = DateTime.Now;
         private int _frameCount = 0;
 
-        private void CompositionTarget_Rendering(object sender, object e)
+        private void RenderLoop()
         {
-            if (_isRendering && _renderer != null)
+            while (_isRendering)
             {
-                if (AutoRotateCheck.IsChecked == true)
+                lock (_rendererLock)
                 {
-                    _renderer.Ang1 += 0.01f;
+                    if (_renderer != null)
+                    {
+                        if (_autoRotate)
+                        {
+                            _renderer.Ang1 += 0.01f;
+                        }
+                        try
+                        {
+                            _renderer.Render();
+                        }
+                        catch (Exception)
+                        {
+                            // Device list or other issues
+                        }
+                    }
                 }
-                _renderer.Render();
-            }
 
-            // FPS Calculation
-            _frameCount++;
-            var now = DateTime.Now;
-            if ((now - _lastFpsUpdate).TotalSeconds >= 0.5)
-            {
-                var fps = _frameCount / (now - _lastFpsUpdate).TotalSeconds;
-                FpsText.Text = $"FPS: {fps:F1}";
-                _frameCount = 0;
-                _lastFpsUpdate = now;
+                // FPS Calculation
+                _frameCount++;
+                var now = DateTime.Now;
+                if ((now - _lastFpsUpdate).TotalSeconds >= 0.5)
+                {
+                    var fps = _frameCount / (now - _lastFpsUpdate).TotalSeconds;
+                    _lastFpsUpdate = now;
+                    _frameCount = 0;
+
+                    var ignore = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Normal, () =>
+                    {
+                        FpsText.Text = $"FPS: {fps:F1}";
+                    });
+                }
             }
         }
     }
