@@ -13,6 +13,7 @@ namespace MicroWinUI
     {
         public event EventHandler<Rect> CropConfirmed;
         public event EventHandler CropCancelled;
+        public event EventHandler<bool> SelectionChanged; // 选区状态变化事件，参数为是否有选区
 
         private double _imageWidth;
         private double _imageHeight;
@@ -75,6 +76,9 @@ namespace MicroWinUI
             
             // 更新SelectionCanvas的hit test状态
             SelectionCanvas.IsHitTestVisible = _hasSelection;
+            
+            // 通知外部选区状态变化
+            SelectionChanged?.Invoke(this, _hasSelection);
         }
 
         private void UpdateVisuals()
@@ -302,6 +306,19 @@ namespace MicroWinUI
             }
         }
 
+        private void SelectionBorder_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.SizeAll, 0);
+        }
+
+        private void SelectionBorder_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            if (!_isDragging)
+            {
+                Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0);
+            }
+        }
+
         #endregion
 
         #region 手柄拖动
@@ -382,6 +399,41 @@ namespace MicroWinUI
 
             _currentRect = new Rect(left, top, right - left, bottom - top);
             UpdateVisuals();
+        }
+
+        private void Thumb_PointerEntered(object sender, PointerRoutedEventArgs e)
+        {
+            var thumb = sender as Thumb;
+            string tag = (string)thumb.Tag;
+            
+            CoreCursorType cursorType = CoreCursorType.Arrow;
+            
+            switch (tag)
+            {
+                case "TL":
+                case "BR":
+                    cursorType = CoreCursorType.SizeNorthwestSoutheast;
+                    break;
+                case "TR":
+                case "BL":
+                    cursorType = CoreCursorType.SizeNortheastSouthwest;
+                    break;
+                case "T":
+                case "B":
+                    cursorType = CoreCursorType.SizeNorthSouth;
+                    break;
+                case "L":
+                case "R":
+                    cursorType = CoreCursorType.SizeWestEast;
+                    break;
+            }
+            
+            Window.Current.CoreWindow.PointerCursor = new CoreCursor(cursorType, 0);
+        }
+
+        private void Thumb_PointerExited(object sender, PointerRoutedEventArgs e)
+        {
+            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0);
         }
 
         #endregion

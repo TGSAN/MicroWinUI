@@ -306,10 +306,14 @@ namespace MicroWinUI
             HandToolButton.IsChecked = false;
             MainInkToolbar.ActiveTool = null;
 
-            // 初始化并显示裁剪控件
+            // 初始化并显示裁剪控件（工具栏由 SelectionChanged 事件控制）
             cropControl.Visibility = Visibility.Visible;
-            CropButtonPanel.Visibility = Visibility.Visible;
             cropControl.Initialize(DisplayImage.ActualWidth, DisplayImage.ActualHeight);
+        }
+
+        private void CropControl_SelectionChanged(object sender, bool hasSelection)
+        {
+            CropButtonPanel.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void CropControl_CropCancelled(object sender, EventArgs e)

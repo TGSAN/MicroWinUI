@@ -50,7 +50,7 @@
                 <Grid x:Name="ImageGrid" HorizontalAlignment="Center" VerticalAlignment="Center">
                     <Image x:Name="DisplayImage" Stretch="Fill" UseLayoutRounding="True" />
                     <InkCanvas x:Name="inkCanvas" />
-                    <local:CropControl x:Name="cropControl" Visibility="Collapsed" CropConfirmed="CropControl_CropConfirmed" CropCancelled="CropControl_CropCancelled" />
+                    <local:CropControl x:Name="cropControl" Visibility="Collapsed" CropConfirmed="CropControl_CropConfirmed" CropCancelled="CropControl_CropCancelled" SelectionChanged="CropControl_SelectionChanged" />
                 </Grid>
             </ScrollViewer>
 
