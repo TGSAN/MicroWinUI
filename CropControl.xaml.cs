@@ -28,6 +28,16 @@ namespace MicroWinUI
         private bool _hasSelection = false;           // 是否有有效裁剪框
         private bool _isCreatingSelection = false;    // 是否正在拖动创建新裁剪框
         private Point _creationStartPoint;            // 创建裁剪框的起始点
+        
+        // 手柄拖动锚点 - 用于支持翻转
+        private double _thumbAnchorX;                 // 手柄拖动时X方向锚点（不移动的那条边）
+        private double _thumbAnchorY;                 // 手柄拖动时Y方向锚点（不移动的那条边）
+        private double _thumbStartActiveX;            // 拖动开始时的X方向活动边初始位置
+        private double _thumbStartActiveY;            // 拖动开始时的Y方向活动边初始位置
+        private double _thumbTotalDeltaX;             // 累计X方向增量
+        private double _thumbTotalDeltaY;             // 累计Y方向增量
+        private bool _thumbMovesX;                    // 当前手柄是否移动X
+        private bool _thumbMovesY;                    // 当前手柄是否移动Y
 
         public CropControl()
         {
@@ -296,53 +306,81 @@ namespace MicroWinUI
 
         #region 手柄拖动
 
-        private void Thumb_DragDelta(object sender, DragDeltaEventArgs e)
+        private void Thumb_DragStarted(object sender, DragStartedEventArgs e)
         {
             var thumb = sender as Thumb;
             string tag = (string)thumb.Tag;
 
-            double dX = e.HorizontalChange;
-            double dY = e.VerticalChange;
-
-            double newLeft = _currentRect.Left;
-            double newTop = _currentRect.Top;
-            double newWidth = _currentRect.Width;
-            double newHeight = _currentRect.Height;
-
+            // 根据手柄类型确定锚点和活动边
+            _thumbMovesX = tag.Contains("L") || tag.Contains("R");
+            _thumbMovesY = tag.Contains("T") || tag.Contains("B");
+            
+            // 初始化累计增量
+            _thumbTotalDeltaX = 0;
+            _thumbTotalDeltaY = 0;
+            
             if (tag.Contains("L"))
             {
-                double maxDX = newWidth - MinSize;
-                dX = Math.Min(dX, maxDX);
-                newLeft += dX;
-                newWidth -= dX;
+                _thumbAnchorX = _currentRect.Right;
+                _thumbStartActiveX = _currentRect.Left;
             }
-            if (tag.Contains("R"))
+            else if (tag.Contains("R"))
             {
-                double minWidth = MinSize;
-                if (newWidth + dX < minWidth) dX = minWidth - newWidth;
-                newWidth += dX;
+                _thumbAnchorX = _currentRect.Left;
+                _thumbStartActiveX = _currentRect.Right;
             }
+            
             if (tag.Contains("T"))
             {
-                double maxDY = newHeight - MinSize;
-                dY = Math.Min(dY, maxDY);
-                newTop += dY;
-                newHeight -= dY;
+                _thumbAnchorY = _currentRect.Bottom;
+                _thumbStartActiveY = _currentRect.Top;
             }
-            if (tag.Contains("B"))
+            else if (tag.Contains("B"))
             {
-                double minHeight = MinSize;
-                if (newHeight + dY < minHeight) dY = minHeight - newHeight;
-                newHeight += dY;
+                _thumbAnchorY = _currentRect.Top;
+                _thumbStartActiveY = _currentRect.Bottom;
+            }
+        }
+
+        private void Thumb_DragDelta(object sender, DragDeltaEventArgs e)
+        {
+            // 累加增量（不约束）
+            _thumbTotalDeltaX += e.HorizontalChange;
+            _thumbTotalDeltaY += e.VerticalChange;
+            
+            // 使用初始位置 + 累计增量计算活动边，然后约束
+            double activeX = _thumbStartActiveX + _thumbTotalDeltaX;
+            double activeY = _thumbStartActiveY + _thumbTotalDeltaY;
+            
+            activeX = Math.Max(0, Math.Min(activeX, _imageWidth));
+            activeY = Math.Max(0, Math.Min(activeY, _imageHeight));
+
+            // 使用锚点和活动边计算新的 rect
+            double left, right, top, bottom;
+            
+            if (_thumbMovesX)
+            {
+                left = Math.Min(_thumbAnchorX, activeX);
+                right = Math.Max(_thumbAnchorX, activeX);
+            }
+            else
+            {
+                left = _currentRect.Left;
+                right = _currentRect.Right;
+            }
+            
+            if (_thumbMovesY)
+            {
+                top = Math.Min(_thumbAnchorY, activeY);
+                bottom = Math.Max(_thumbAnchorY, activeY);
+            }
+            else
+            {
+                top = _currentRect.Top;
+                bottom = _currentRect.Bottom;
             }
 
-            // 边界约束
-            if (newLeft < 0) { newWidth += newLeft; newLeft = 0; }
-            if (newTop < 0) { newHeight += newTop; newTop = 0; }
-            if (newLeft + newWidth > _imageWidth) newWidth = _imageWidth - newLeft;
-            if (newTop + newHeight > _imageHeight) newHeight = _imageHeight - newTop;
-
-            _currentRect = new Rect(newLeft, newTop, newWidth, newHeight);
+            _currentRect = new Rect(left, top, right - left, bottom - top);
             UpdateVisuals();
         }
 

@@ -78,21 +78,21 @@
 
             <!-- 8个拖动手柄 -->
             <!-- Top Left -->
-            <Thumb x:Name="ThumbTL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="40" DragDelta="Thumb_DragDelta" Tag="TL" IsHitTestVisible="True"/>
+            <Thumb x:Name="ThumbTL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="40" DragStarted="Thumb_DragStarted" DragDelta="Thumb_DragDelta" Tag="TL" IsHitTestVisible="True"/>
             <!-- Top -->
-            <Thumb x:Name="ThumbT" Style="{StaticResource CropThumbStyle}" Canvas.Left="140" Canvas.Top="40" DragDelta="Thumb_DragDelta" Tag="T" IsHitTestVisible="True"/>
+            <Thumb x:Name="ThumbT" Style="{StaticResource CropThumbStyle}" Canvas.Left="140" Canvas.Top="40" DragStarted="Thumb_DragStarted" DragDelta="Thumb_DragDelta" Tag="T" IsHitTestVisible="True"/>
             <!-- Top Right -->
-            <Thumb x:Name="ThumbTR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="40" DragDelta="Thumb_DragDelta" Tag="TR" IsHitTestVisible="True"/>
+            <Thumb x:Name="ThumbTR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="40" DragStarted="Thumb_DragStarted" DragDelta="Thumb_DragDelta" Tag="TR" IsHitTestVisible="True"/>
             <!-- Right -->
-            <Thumb x:Name="ThumbR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="140" DragDelta="Thumb_DragDelta" Tag="R" IsHitTestVisible="True"/>
+            <Thumb x:Name="ThumbR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="140" DragStarted="Thumb_DragStarted" DragDelta="Thumb_DragDelta" Tag="R" IsHitTestVisible="True"/>
             <!-- Bottom Right -->
-            <Thumb x:Name="ThumbBR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="240" DragDelta="Thumb_DragDelta" Tag="BR" IsHitTestVisible="True"/>
+            <Thumb x:Name="ThumbBR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="240" DragStarted="Thumb_DragStarted" DragDelta="Thumb_DragDelta" Tag="BR" IsHitTestVisible="True"/>
             <!-- Bottom -->
-            <Thumb x:Name="ThumbB" Style="{StaticResource CropThumbStyle}" Canvas.Left="140" Canvas.Top="240" DragDelta="Thumb_DragDelta" Tag="B" IsHitTestVisible="True"/>
+            <Thumb x:Name="ThumbB" Style="{StaticResource CropThumbStyle}" Canvas.Left="140" Canvas.Top="240" DragStarted="Thumb_DragStarted" DragDelta="Thumb_DragDelta" Tag="B" IsHitTestVisible="True"/>
             <!-- Bottom Left -->
-            <Thumb x:Name="ThumbBL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="240" DragDelta="Thumb_DragDelta" Tag="BL" IsHitTestVisible="True"/>
+            <Thumb x:Name="ThumbBL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="240" DragStarted="Thumb_DragStarted" DragDelta="Thumb_DragDelta" Tag="BL" IsHitTestVisible="True"/>
             <!-- Left -->
-            <Thumb x:Name="ThumbL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="140" DragDelta="Thumb_DragDelta" Tag="L" IsHitTestVisible="True"/>
+            <Thumb x:Name="ThumbL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="140" DragStarted="Thumb_DragStarted" DragDelta="Thumb_DragDelta" Tag="L" IsHitTestVisible="True"/>
             
         </Canvas>
 
