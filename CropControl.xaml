@@ -26,15 +26,22 @@
     <Grid x:Name="LayoutRoot" Background="Transparent" PointerPressed="LayoutRoot_PointerPressed">
         <!-- 半透明遮罩层 -->
         <!-- 4-Rectangle Mask Layer -->
-        <Canvas IsHitTestVisible="False">
-            <Rectangle x:Name="TopMask" Fill="#66000000" />
-            <Rectangle x:Name="BottomMask" Fill="#66000000" />
-            <Rectangle x:Name="LeftMask" Fill="#66000000" />
-            <Rectangle x:Name="RightMask" Fill="#66000000" />
+        <Canvas x:Name="MaskCanvas"
+                Background="Transparent"
+                PointerPressed="MaskCanvas_PointerPressed"
+                PointerMoved="MaskCanvas_PointerMoved"
+                PointerReleased="MaskCanvas_PointerReleased"
+                PointerCanceled="MaskCanvas_PointerReleased"
+                PointerEntered="MaskCanvas_PointerEntered"
+                PointerExited="MaskCanvas_PointerExited">
+            <Rectangle x:Name="TopMask" Fill="#66000000" IsHitTestVisible="False" />
+            <Rectangle x:Name="BottomMask" Fill="#66000000" IsHitTestVisible="False" />
+            <Rectangle x:Name="LeftMask" Fill="#66000000" IsHitTestVisible="False" />
+            <Rectangle x:Name="RightMask" Fill="#66000000" IsHitTestVisible="False" />
         </Canvas>
 
         <!-- 裁剪对齐网格线 (可选) -->
-        <Canvas>
+        <Canvas x:Name="SelectionCanvas" IsHitTestVisible="False">
             <!-- 裁剪框主体，支持拖动平移 -->
             <Border x:Name="SelectionBorder"
                     BorderBrush="{ThemeResource SystemControlHighlightAccentBrush}"
@@ -42,6 +49,7 @@
                     Width="200" Height="200"
                     Background="Transparent"
                     Canvas.Left="50" Canvas.Top="50"
+                    IsHitTestVisible="True"
                     PointerPressed="SelectionBorder_PointerPressed"
                     PointerMoved="SelectionBorder_PointerMoved"
                     PointerReleased="SelectionBorder_PointerReleased"
@@ -70,21 +78,21 @@
 
             <!-- 8个拖动手柄 -->
             <!-- Top Left -->
-            <Thumb x:Name="ThumbTL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="40" DragDelta="Thumb_DragDelta" Tag="TL"/>
+            <Thumb x:Name="ThumbTL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="40" DragDelta="Thumb_DragDelta" Tag="TL" IsHitTestVisible="True"/>
             <!-- Top -->
-            <Thumb x:Name="ThumbT" Style="{StaticResource CropThumbStyle}" Canvas.Left="140" Canvas.Top="40" DragDelta="Thumb_DragDelta" Tag="T"/>
+            <Thumb x:Name="ThumbT" Style="{StaticResource CropThumbStyle}" Canvas.Left="140" Canvas.Top="40" DragDelta="Thumb_DragDelta" Tag="T" IsHitTestVisible="True"/>
             <!-- Top Right -->
-            <Thumb x:Name="ThumbTR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="40" DragDelta="Thumb_DragDelta" Tag="TR"/>
+            <Thumb x:Name="ThumbTR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="40" DragDelta="Thumb_DragDelta" Tag="TR" IsHitTestVisible="True"/>
             <!-- Right -->
-            <Thumb x:Name="ThumbR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="140" DragDelta="Thumb_DragDelta" Tag="R"/>
+            <Thumb x:Name="ThumbR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="140" DragDelta="Thumb_DragDelta" Tag="R" IsHitTestVisible="True"/>
             <!-- Bottom Right -->
-            <Thumb x:Name="ThumbBR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="240" DragDelta="Thumb_DragDelta" Tag="BR"/>
+            <Thumb x:Name="ThumbBR" Style="{StaticResource CropThumbStyle}" Canvas.Left="240" Canvas.Top="240" DragDelta="Thumb_DragDelta" Tag="BR" IsHitTestVisible="True"/>
             <!-- Bottom -->
-            <Thumb x:Name="ThumbB" Style="{StaticResource CropThumbStyle}" Canvas.Left="140" Canvas.Top="240" DragDelta="Thumb_DragDelta" Tag="B"/>
+            <Thumb x:Name="ThumbB" Style="{StaticResource CropThumbStyle}" Canvas.Left="140" Canvas.Top="240" DragDelta="Thumb_DragDelta" Tag="B" IsHitTestVisible="True"/>
             <!-- Bottom Left -->
-            <Thumb x:Name="ThumbBL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="240" DragDelta="Thumb_DragDelta" Tag="BL"/>
+            <Thumb x:Name="ThumbBL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="240" DragDelta="Thumb_DragDelta" Tag="BL" IsHitTestVisible="True"/>
             <!-- Left -->
-            <Thumb x:Name="ThumbL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="140" DragDelta="Thumb_DragDelta" Tag="L"/>
+            <Thumb x:Name="ThumbL" Style="{StaticResource CropThumbStyle}" Canvas.Left="40" Canvas.Top="140" DragDelta="Thumb_DragDelta" Tag="L" IsHitTestVisible="True"/>
             
         </Canvas>
 
