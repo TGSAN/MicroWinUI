@@ -306,9 +306,6 @@ namespace MicroWinUI
             HandToolButton.IsChecked = false;
             MainInkToolbar.ActiveTool = null;
 
-            // 禁用缩放以避免冲突
-            MainScrollViewer.ZoomMode = ZoomMode.Disabled;
-
             // 初始化并显示裁剪控件
             cropControl.Visibility = Visibility.Visible;
             CropButtonPanel.Visibility = Visibility.Visible;
@@ -319,7 +316,6 @@ namespace MicroWinUI
         {
             cropControl.Visibility = Visibility.Collapsed;
             CropButtonPanel.Visibility = Visibility.Collapsed;
-            MainScrollViewer.ZoomMode = ZoomMode.Enabled;
 
             // 退出裁剪
             CropButton.IsChecked = false;
@@ -332,7 +328,6 @@ namespace MicroWinUI
             {
                 cropControl.Visibility = Visibility.Collapsed;
                 CropButtonPanel.Visibility = Visibility.Collapsed;
-                MainScrollViewer.ZoomMode = ZoomMode.Enabled;
 
                 CropButton.IsChecked = false;
                 EnableHandMode();
