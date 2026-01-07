@@ -43,6 +43,26 @@ namespace MicroWinUI
         public CropControl()
         {
             this.InitializeComponent();
+            
+            // 当控件隐藏时重置光标
+            this.RegisterPropertyChangedCallback(VisibilityProperty, OnVisibilityChanged);
+        }
+
+        private void OnVisibilityChanged(DependencyObject sender, DependencyProperty dp)
+        {
+            if (this.Visibility == Visibility.Collapsed)
+            {
+                // 控件变为隐藏时重置光标
+                ResetCursor();
+            }
+        }
+
+        /// <summary>
+        /// 重置光标为默认箭头
+        /// </summary>
+        private void ResetCursor()
+        {
+            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 0);
         }
 
         public void Initialize(double width, double height)
