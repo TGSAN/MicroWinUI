@@ -7,8 +7,6 @@
 # 项目说明
 * 当前项目是一个叫做 MicroWinUI 的脚手架工程，MainPage 是从 UWP Gallery 拷贝过来的，可以删除。
 * 创建 PLANS.md 文件来记录项目计划和进度
-# 需求
-* 实现打开 FP16 HDR JXR 图片，并可以和 InkCanvas 上修改并支持另存为 FP16 HDR JXR 图片
 # 限制
 * 尽可能使用 UWP API，不要使用 Windows API，确保其可移植性
 * 禁止使用 Windows App SDK 或者 WinUI 3

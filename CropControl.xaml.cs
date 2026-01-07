@@ -111,6 +111,9 @@ namespace MicroWinUI
                 double dx = cur.X - _lastDragPoint.X;
                 double dy = cur.Y - _lastDragPoint.Y;
 
+                double oldX = _currentRect.X;
+                double oldY = _currentRect.Y;
+
                 double newX = _currentRect.X + dx;
                 double newY = _currentRect.Y + dy;
 
@@ -121,7 +124,11 @@ namespace MicroWinUI
                 _currentRect.Y = newY;
                 UpdateVisuals();
 
-                _lastDragPoint = cur;
+                // 只根据实际移动量更新上次拖动点，避免鼠标移出边界后再返回导致位置跳跃
+                double actualDx = _currentRect.X - oldX;
+                double actualDy = _currentRect.Y - oldY;
+                _lastDragPoint = new Point(_lastDragPoint.X + actualDx, _lastDragPoint.Y + actualDy);
+
                 e.Handled = true;
             }
         }
