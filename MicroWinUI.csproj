@@ -20,7 +20,26 @@
 		<PackageReference Include="Mile.Xaml" Version="2.5.1250" />
 	</ItemGroup>
 
-	<Target Name="RenameOutputTo1" AfterTargets="Build">
+	<Target Name="EmbedMileXamlStyles" BeforeTargets="ResolveReferences">
+		<ItemGroup>
+			<_MileXamlStyleItem
+			  Include="@(ReferenceCopyLocalPaths)"
+			  Condition="'%(Filename)%(Extension)' == 'Mile.Xaml.Styles.SunValley.xbf'" />
+
+			<!-- 从复制列表中移除 xbf -->
+			<ReferenceCopyLocalPaths Remove="@(_MileXamlStyleItem)" />
+
+			<!-- xbf 添加到嵌入列表 -->
+			<_EmbedFile Include="@(_MileXamlStyleItem)">
+				<TargetPath>Mile.Xaml.Styles.SunValley.xbf</TargetPath>
+				<!-- 手动指定 OutputGroup 元数据来 Hack 构建脚本防止报错 -->
+				<OutputGroup>EmbedOutputGroupForPackaging</OutputGroup>
+				<ProjectName>$(ProjectName)</ProjectName>
+			</_EmbedFile>
+		</ItemGroup>
+	</Target>
+
+	<Target Name="RenameOutputPri" AfterTargets="Build">
 		<PropertyGroup>
 			<_OldFile>$(TargetDir)$(TargetName).pri</_OldFile>
 			<_NewFile>$(TargetDir)resources.pri</_NewFile>
