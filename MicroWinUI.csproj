@@ -1,21 +1,37 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
-  <PropertyGroup>
-    <OutputType>WinExe</OutputType>
-    <TargetFramework>net48</TargetFramework>
-    <TargetPlatformVersion>10.0.26100.0</TargetPlatformVersion>
-    <TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
-    <LangVersion>latest</LangVersion>
-    <ApplicationManifest>App.manifest</ApplicationManifest>
-    <UseWindowsForms>true</UseWindowsForms>
-    <!-- Add workaround for WinRT support in the old .NET SDK -->
-    <SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
-    <PlatformTarget>AnyCPU</PlatformTarget>
-	<MileXamlNoSunValleyXamlStyle>false</MileXamlNoSunValleyXamlStyle>
-  </PropertyGroup>
-  
-  <ItemGroup>
-    <PackageReference Include="Mile.Xaml" Version="2.5.1250" />
-  </ItemGroup>
+	<PropertyGroup>
+		<OutputType>WinExe</OutputType>
+		<TargetFramework>net48</TargetFramework>
+		<TargetPlatformVersion>10.0.26100.0</TargetPlatformVersion>
+		<TargetPlatformMinVersion>10.0.19041.0</TargetPlatformMinVersion>
+		<LangVersion>latest</LangVersion>
+		<ApplicationManifest>App.manifest</ApplicationManifest>
+		<UseWindowsForms>true</UseWindowsForms>
+		<!-- Add workaround for WinRT support in the old .NET SDK -->
+		<SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
+		<PlatformTarget>AnyCPU</PlatformTarget>
+		<MileXamlNoSunValleyXamlStyle>false</MileXamlNoSunValleyXamlStyle>
+		<DisableEmbeddedXbf>false</DisableEmbeddedXbf>
+		<GenerateLibraryLayout>true</GenerateLibraryLayout>
+	</PropertyGroup>
+
+	<ItemGroup>
+		<PackageReference Include="Mile.Xaml" Version="2.5.1250" />
+	</ItemGroup>
+
+	<Target Name="RenameOutputTo1" AfterTargets="Build">
+		<PropertyGroup>
+			<_OldFile>$(TargetDir)$(TargetName).pri</_OldFile>
+			<_NewFile>$(TargetDir)resources.pri</_NewFile>
+		</PropertyGroup>
+
+		<Message Importance="high" Text="正在重命名输出文件: $(TargetName).pri -> resources.pri" />
+
+		<Move
+		  SourceFiles="$(_OldFile)"
+		  DestinationFiles="$(_NewFile)"
+		  OverwriteReadOnlyFiles="true" />
+	</Target>
 
 </Project>
