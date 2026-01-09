@@ -79,12 +79,28 @@ namespace MicroWinUI
             // Only rely on manual flag. Engine state might be volatile during seeks.
             if (_isPlaying && !_isSeeking) 
             {
-                if (_mp1.PlaybackSession.NaturalDuration.TotalSeconds > 0)
+                var duration = _mp1.PlaybackSession.NaturalDuration;
+                if (duration.TotalSeconds > 0)
                 {
-                    _isUpdatingSlider = true;
-                    TimeSlider.Value = _timelineController.Position.TotalSeconds;
-                    _isUpdatingSlider = false;
-                    UpdateDisplayTime();
+                    if (_timelineController.Position >= duration)
+                    {
+                        // Video ended
+                        _isPlaying = false;
+                        _timelineController.Pause();
+                        _timelineController.Position = duration; // Clamp to end
+                        
+                        _isUpdatingSlider = true;
+                        TimeSlider.Value = duration.TotalSeconds;
+                        _isUpdatingSlider = false;
+                        UpdateDisplayTime();
+                    }
+                    else
+                    {
+                        _isUpdatingSlider = true;
+                        TimeSlider.Value = _timelineController.Position.TotalSeconds;
+                        _isUpdatingSlider = false;
+                        UpdateDisplayTime();
+                    }
                 }
             }
         }
@@ -263,6 +279,11 @@ namespace MicroWinUI
         {
             if (!_isUpdatingSlider)
             {
+                // User is seeking (dragging or clicking or keyboard)
+                // Force pause to prevent fighting between timer updates and user input
+                _isPlaying = false;
+                _timelineController.Pause();
+
                 var newPos = TimeSpan.FromSeconds(e.NewValue);
                 _timelineController.Position = newPos;
                 UpdateDisplayTime();
