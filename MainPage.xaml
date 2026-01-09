@@ -80,11 +80,11 @@
                         Fill="White" />
                     <Grid
                         x:Name="SplitThumb"
-                        Width="24"
-                        Height="24">
-                        <Ellipse Fill="White" />
+                        Width="18"
+                        Height="18">
+                        <Ellipse Fill="{ThemeResource AccentFillColorDefaultBrush}" />
                         <Ellipse
-                            Stroke="Gray"
+                            Stroke="White"
                             StrokeThickness="2" />
                     </Grid>
                 </Canvas>
@@ -102,15 +102,16 @@
             </Grid.ColumnDefinitions>
 
             <StackPanel Orientation="Horizontal" Spacing="8">
-                <Button Click="StepBack_Click" Content="&lt;" ToolTipService.ToolTip="Previous Frame" />
+                <RepeatButton Click="StepBack_Click" Content="&lt;" ToolTipService.ToolTip="Previous Frame" />
                 <Button Click="PlayPause_Click" Content="Play/Pause" />
-                <Button Click="StepForward_Click" Content="&gt;" ToolTipService.ToolTip="Next Frame" />
+                <RepeatButton Click="StepForward_Click" Content="&gt;" ToolTipService.ToolTip="Next Frame" />
             </StackPanel>
 
             <Slider
                 x:Name="TimeSlider"
                 Grid.Column="1"
                 Margin="12,0"
+                IsThumbToolTipEnabled="False"
                 VerticalAlignment="Center" 
                 PointerPressed="TimeSlider_PointerPressed"
                 PointerReleased="TimeSlider_PointerReleased"

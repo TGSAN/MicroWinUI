@@ -148,7 +148,7 @@ namespace MicroWinUI
 
         private void OnMediaOpened(MediaPlayer sender, object args)
         {
-            Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            _ = Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
             {
                 // Ensure controller is attached when media opens
                 sender.CommandManager.IsEnabled = false;
@@ -189,8 +189,8 @@ namespace MicroWinUI
         {
             if (_isPlaying)
             {
-                _isPlaying = false;
-                _timelineController.Pause();
+                StepFrame(true);
+                StepFrame(false);
             }
             else
             {
@@ -202,11 +202,19 @@ namespace MicroWinUI
         private void StepForward_Click(object sender, RoutedEventArgs e)
         {
             StepFrame(true);
+            if (_isPlaying)
+            {
+                StepFrame(true);
+            }
         }
 
         private void StepBack_Click(object sender, RoutedEventArgs e)
         {
-             StepFrame(false);
+            StepFrame(false);
+            if (_isPlaying)
+            {
+                StepFrame(false);
+            }
         }
 
         private void StepFrame(bool forward)
@@ -344,12 +352,12 @@ namespace MicroWinUI
 
         private void OverlayCanvas_PointerEntered(object sender, PointerRoutedEventArgs e)
         {
-            Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.SizeWestEast, 1);
+            //Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.SizeWestEast, 1);
         }
 
         private void OverlayCanvas_PointerExited(object sender, PointerRoutedEventArgs e)
         {
-             Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 1);
+             //Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 1);
         }
 
         #endregion
