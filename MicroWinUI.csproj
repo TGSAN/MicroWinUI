@@ -15,6 +15,7 @@
 		<MileXamlManagedNoNativeBackend>true</MileXamlManagedNoNativeBackend>
 		<DisableEmbeddedXbf>false</DisableEmbeddedXbf>
 		<GenerateLibraryLayout>true</GenerateLibraryLayout>
+		<Platforms>AnyCPU;x64</Platforms>
 	</PropertyGroup>
 
 	<ItemGroup>
@@ -49,5 +50,4 @@
 
 		<Move SourceFiles="$(_OldFile)" DestinationFiles="$(_NewFile)" OverwriteReadOnlyFiles="true" />
 	</Target>
-
 </Project>
