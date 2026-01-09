@@ -45,6 +45,10 @@ namespace MicroWinUI
             _host.Backdrop = IslandWindow.SystemBackdrop.Mica;
             InitializePlayers();
             InitializeTimer();
+
+            // Use AddHandler to capture handled events (crucial for Slider)
+            TimeSlider.AddHandler(PointerPressedEvent, new PointerEventHandler(TimeSlider_PointerPressed), true);
+            TimeSlider.AddHandler(PointerReleasedEvent, new PointerEventHandler(TimeSlider_PointerReleased), true);
         }
 
         private void InitializePlayers()
@@ -64,14 +68,41 @@ namespace MicroWinUI
             _mp2 = Player2.MediaPlayer;
             _mp2.CommandManager.IsEnabled = false;
             _mp2.TimelineController = _timelineController;
+            _mp2.MediaOpened += OnMediaOpened;
         }
 
         private void InitializeTimer()
         {
             _timer = new DispatcherTimer();
-            _timer.Interval = TimeSpan.FromMilliseconds(33); // ~30fps UI update
+            _timer.Interval = TimeSpan.FromMilliseconds(16); // Default to 60fps for smoother UI
             _timer.Tick += OnTimerTick;
             _timer.Start();
+        }
+
+        private TimeSpan _lastThrottledPos = TimeSpan.Zero;
+        private DateTime _lastThrottleTime = DateTime.MinValue;
+
+        private void TimeSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+        {
+            if (!_isUpdatingSlider)
+            {
+                // User is seeking
+                _isPlaying = false;
+                _timelineController.Pause();
+
+                var newPos = TimeSpan.FromSeconds(e.NewValue);
+                
+                // Throttle updates to prevent flooding the controller (dead loop/freeze)
+                var now = DateTime.UtcNow;
+                if ((now - _lastThrottleTime).TotalMilliseconds > 50 || Math.Abs((newPos - _lastThrottledPos).TotalMilliseconds) > 500)
+                {
+                    _timelineController.Position = newPos;
+                    UpdateDisplayTime();
+                    
+                    _lastThrottledPos = newPos;
+                    _lastThrottleTime = now;
+                }
+            }
         }
 
         private void OnTimerTick(object sender, object e)
@@ -79,18 +110,21 @@ namespace MicroWinUI
             // Only rely on manual flag. Engine state might be volatile during seeks.
             if (_isPlaying && !_isSeeking) 
             {
-                var duration = _mp1.PlaybackSession.NaturalDuration;
-                if (duration.TotalSeconds > 0)
+                var d1 = _mp1.PlaybackSession.NaturalDuration;
+                var d2 = _mp2.PlaybackSession.NaturalDuration;
+                var maxDuration = (d1 > d2) ? d1 : d2;
+
+                if (maxDuration.TotalSeconds > 0)
                 {
-                    if (_timelineController.Position >= duration)
+                    if (_timelineController.Position >= maxDuration)
                     {
                         // Video ended
                         _isPlaying = false;
                         _timelineController.Pause();
-                        _timelineController.Position = duration; // Clamp to end
+                        _timelineController.Position = maxDuration; // Clamp to end
                         
                         _isUpdatingSlider = true;
-                        TimeSlider.Value = duration.TotalSeconds;
+                        TimeSlider.Value = maxDuration.TotalSeconds;
                         _isUpdatingSlider = false;
                         UpdateDisplayTime();
                     }
@@ -170,33 +204,43 @@ namespace MicroWinUI
                 sender.CommandManager.IsEnabled = false;
                 sender.TimelineController = _timelineController;
 
-                if (sender == _mp1)
+                // Attempt to get real frame rate from specific player
+                if (sender.Source is MediaPlaybackItem item && item.VideoTracks.Count > 0)
                 {
-                    // Attempt to get real frame rate
-                    if (sender.Source is MediaPlaybackItem item && item.VideoTracks.Count > 0)
+                    var props = item.VideoTracks[0].GetEncodingProperties();
+                    if (props.FrameRate.Numerator > 0 && props.FrameRate.Denominator > 0)
                     {
-                        var props = item.VideoTracks[0].GetEncodingProperties();
-                        if (props.FrameRate.Numerator > 0 && props.FrameRate.Denominator > 0)
+                        double fps = (double)props.FrameRate.Numerator / props.FrameRate.Denominator;
+                        if (fps > 0)
                         {
-                            double fps = (double)props.FrameRate.Numerator / props.FrameRate.Denominator;
-                            if (fps > 0)
-                            {
-                                _frameStep = TimeSpan.FromSeconds(1.0 / fps);
-                            }
+                            _frameStep = TimeSpan.FromSeconds(1.0 / fps);
+                            _timer.Interval = _frameStep;
                         }
                     }
-
-                    TimeSlider.Maximum = _mp1.PlaybackSession.NaturalDuration.TotalSeconds;
-                    UpdateDisplayTime();
                 }
+
+                UpdateTimelineDuration();
             });
+        }
+        
+        private void UpdateTimelineDuration()
+        {
+             var d1 = _mp1.PlaybackSession.NaturalDuration;
+             var d2 = _mp2.PlaybackSession.NaturalDuration;
+             var maxDuration = (d1 > d2) ? d1 : d2;
+             
+             TimeSlider.Maximum = maxDuration.TotalSeconds;
+             UpdateDisplayTime();
         }
         
         private void UpdateDisplayTime()
         {
             var current = _timelineController.Position;
-            var total = _mp1.PlaybackSession.NaturalDuration;
-            TimeText.Text = $"{current:hh\\:mm\\:ss\\.fff} / {total:hh\\:mm\\:ss\\.fff}";
+            var d1 = _mp1.PlaybackSession.NaturalDuration;
+            var d2 = _mp2.PlaybackSession.NaturalDuration;
+            var maxDuration = (d1 > d2) ? d1 : d2;
+            
+            TimeText.Text = $"{current:hh\\:mm\\:ss\\.fff} / {maxDuration:hh\\:mm\\:ss\\.fff}";
         }
 
         #region Playback Controls
@@ -275,21 +319,6 @@ namespace MicroWinUI
             _timelineController.Position = newPos;
         }
 
-        private void TimeSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
-        {
-            if (!_isUpdatingSlider)
-            {
-                // User is seeking (dragging or clicking or keyboard)
-                // Force pause to prevent fighting between timer updates and user input
-                _isPlaying = false;
-                _timelineController.Pause();
-
-                var newPos = TimeSpan.FromSeconds(e.NewValue);
-                _timelineController.Position = newPos;
-                UpdateDisplayTime();
-            }
-        }
-
         #endregion
 
         #region Splitter Logic
@@ -366,21 +395,6 @@ namespace MicroWinUI
             }
         }
         
-        private void OverlayCanvas_ManipulationDelta(object sender, ManipulationDeltaRoutedEventArgs e)
-        {
-            // Managed by PointerMoved
-        }
-
-        private void OverlayCanvas_PointerEntered(object sender, PointerRoutedEventArgs e)
-        {
-            //Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.SizeWestEast, 1);
-        }
-
-        private void OverlayCanvas_PointerExited(object sender, PointerRoutedEventArgs e)
-        {
-             //Window.Current.CoreWindow.PointerCursor = new CoreCursor(CoreCursorType.Arrow, 1);
-        }
-
         #endregion
     }
 }
