@@ -10,6 +10,7 @@ using System.Xml.Linq;
 using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
+using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
 
 namespace MicroWinUICore
@@ -87,6 +88,7 @@ namespace MicroWinUICore
             uiSettings.ColorValuesChanged += (s, e) =>
             {
                 Invoke(UpdateTheme);
+                Invoke(UpdateBackdrop);
             };
             this.Load += IslandForm_Load;
             this.Activated += IslandWindow_Activated;
@@ -95,6 +97,12 @@ namespace MicroWinUICore
             this.Move += IslandWindow_Move;
             xamlHost.HandleCreated += XamlHost_HandleCreated;
             xamlHost.SizeChanged += XamlHost_SizeChanged;
+        }
+
+        private void IslandWindow_Activated(object sender, EventArgs e)
+        {
+            UpdateTheme();
+            UpdateBackdrop();
         }
 
         private void XamlHost_SizeChanged(object sender, EventArgs e)
@@ -132,13 +140,6 @@ namespace MicroWinUICore
                     Win32API.SWP_NOZORDER | Win32API.SWP_NOACTIVATE
                 );
             }
-        }
-
-        private void IslandWindow_Activated(object sender, EventArgs e)
-        {
-            bool isDarkMode = IsAppDarkMode();
-            // DWMWA_COLOR_NONE 忽略标题上色
-            SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, 0xFFFFFFFE, sizeof(int));
         }
 
         private bool IsColorLight(Windows.UI.Color clr)
@@ -183,6 +184,19 @@ namespace MicroWinUICore
 
         private void UpdateBackdrop()
         {
+            // DWMWA_COLOR_NONE 忽略标题上色
+            SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, 0xFFFFFFFE, sizeof(int));
+            bool isDarkMode = IsAppDarkMode();
+            bool colorPrevalence = IsColorPrevalence();
+            if (colorPrevalence && (Backdrop == SystemBackdrop.None || !IsWindows10OrGreater(22000)))
+            {
+                // 覆盖颜色
+                (this.xamlHost.Child as Page)?.Background = isDarkMode ? new SolidColorBrush(Windows.UI.Color.FromArgb(255, 32, 32, 32)) : new SolidColorBrush(Windows.UI.Color.FromArgb(255, 243, 243, 243));
+            }
+            else
+            {
+                (this.xamlHost.Child as Page)?.Background = new SolidColorBrush(Windows.UI.Colors.Transparent);
+            }
             if (Backdrop == SystemBackdrop.Mica)
             {
                 // Enable Mica
