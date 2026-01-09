@@ -137,16 +137,8 @@ namespace MicroWinUICore
         private void IslandWindow_Activated(object sender, EventArgs e)
         {
             bool isDarkMode = IsAppDarkMode();
-            bool colorPrevalence = IsColorPrevalence();
-            if (colorPrevalence)
-            {
-                // 覆盖颜色
-                SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, isDarkMode ? 0x00202020 : 0x00F3F3F3, sizeof(int));
-            }
-            else
-            {
-                SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, 0xFFFFFFFF, sizeof(int));
-            }
+            // DWMWA_COLOR_NONE 忽略标题上色
+            SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, 0xFFFFFFFE, sizeof(int));
         }
 
         private bool IsColorLight(Windows.UI.Color clr)
@@ -234,44 +226,6 @@ namespace MicroWinUICore
             var valueAddr = pinnedValue.AddrOfPinnedObject();
             var result = Win32API.DwmSetWindowAttribute(hWnd, (uint)attribute, valueAddr, sizeOf);
             pinnedValue.Free();
-            return result;
-        }
-
-        private static int SetWindowCompositionAttribute(IntPtr hWnd)
-        {
-            //int _blurOpacity = 0; /* 0-255 如果为0，颜色不能设置纯黑000000 */
-            int _blurOpacity = 32; /* 0-255 如果为0，颜色不能设置纯黑000000 */
-            int _blurBackgroundColor = 0xFFFFFF; /* Drak BGR color format */
-            // int _blurBackgroundColor = 0xE6E6E6; /* Drak BGR color format */
-
-            var accent = new Win32API.AccentPolicy
-            {
-                AccentState = Win32API.AccentState.ACCENT_ENABLE_TRANSPARENTGRADIENT,
-                GradientColor = (_blurOpacity << 24) | (_blurBackgroundColor & 0xFFFFFF)
-            };
-
-            var accentStructSize = Marshal.SizeOf(accent);
-
-            var accentPtr = Marshal.AllocHGlobal(accentStructSize);
-            Marshal.StructureToPtr(accent, accentPtr, false);
-
-            var data = new Win32API.WindowCompositionAttributeData
-            {
-                Attribute = Win32API.WindowCompositionAttribute.WCA_ACCENT_POLICY,
-                SizeOfData = accentStructSize,
-                Data = accentPtr
-            };
-
-            var result = Win32API.SetWindowCompositionAttribute(hWnd, ref data);
-
-            Marshal.FreeHGlobal(accentPtr);
-
-            return result;
-        }
-
-        private static int CheckHResult(int result)
-        {
-            if (Marshal.GetExceptionForHR(result) is { } ex) throw ex;
             return result;
         }
 
