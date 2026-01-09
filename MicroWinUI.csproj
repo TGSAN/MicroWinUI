@@ -18,14 +18,13 @@
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Costura.Fody" Version="3.3.3" />
 		<PackageReference Include="Mile.Xaml" Version="2.5.1250" />
 	</ItemGroup>
 
 	<Target Name="EmbedMileXamlStyles" BeforeTargets="ResolveReferences">
 		<ItemGroup>
-			<_MileXamlStyleItem
-			  Include="@(ReferenceCopyLocalPaths)"
-			  Condition="'%(Filename)%(Extension)' == 'Mile.Xaml.Styles.SunValley.xbf'" />
+			<_MileXamlStyleItem Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)%(Extension)' == 'Mile.Xaml.Styles.SunValley.xbf'" />
 
 			<!-- 从复制列表中移除 xbf -->
 			<ReferenceCopyLocalPaths Remove="@(_MileXamlStyleItem)" />
@@ -46,12 +45,9 @@
 			<_NewFile>$(TargetDir)resources.pri</_NewFile>
 		</PropertyGroup>
 
-		<Message Importance="high" Text="正在重命名输出文件: $(TargetName).pri -> resources.pri" />
+		<Message Importance="high" Text="正在重命名输出文件: $(TargetName).pri -&gt; resources.pri" />
 
-		<Move
-		  SourceFiles="$(_OldFile)"
-		  DestinationFiles="$(_NewFile)"
-		  OverwriteReadOnlyFiles="true" />
+		<Move SourceFiles="$(_OldFile)" DestinationFiles="$(_NewFile)" OverwriteReadOnlyFiles="true" />
 	</Target>
 
 </Project>
