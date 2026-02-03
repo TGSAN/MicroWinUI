@@ -978,7 +978,7 @@ namespace MicroWinUI
                 string allHdrCert = "";
                 if (currentHdrCertifications.Length == 0)
                 {
-                    allHdrCert = "无";
+                    allHdrCert = "未找到";
                 }
                 else
                 {
