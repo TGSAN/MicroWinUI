@@ -1,11 +1,11 @@
-﻿using Mile.Xaml;
+﻿using Microsoft.Win32;
+using Mile.Xaml;
 using System;
 using System.Windows.Forms;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using Windows.UI.Xaml;
 using Windows.UI.ViewManagement;
-using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media;
 
@@ -94,12 +94,6 @@ namespace MicroWinUICore
             {
                 this.Icon = extractedIcon; // 设置窗体图标
             }
-        }
-
-        private void IslandWindow_Activated(object sender, EventArgs e)
-        {
-            UpdateTheme();
-            UpdateBackdrop();
         }
 
         private void IslandWindow_Activated(object sender, EventArgs e)
