@@ -1,12 +1,15 @@
-﻿using MicroWinUICore;
+﻿using Microsoft.Win32;
+using MicroWinUICore;
 using Mile.Xaml.Interop;
 using System;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Runtime.ConstrainedExecution;
 using System.Text;
 using System.Threading; // for ConcurrentDictionary
+using System.Threading.Channels;
 using System.Threading.Tasks;
 using Windows.Devices.Display;
 using Windows.Devices.Enumeration;
@@ -21,7 +24,6 @@ using Windows.UI.ViewManagement; // for UISettings
 using Windows.UI.Xaml;
 using Windows.UI.Xaml.Controls;
 using Windows.UI.Xaml.Media; // for Brush
-using System.Threading.Channels;
 
 namespace MicroWinUI
 {
@@ -862,7 +864,7 @@ namespace MicroWinUI
             return start + (end - start) * ratio;
         }
 
-        private bool TryUpdateDisplayInfo() 
+        private bool TryUpdateDisplayInfo()
         {
             return this.updateDisplayInfoChannel.Writer.TryWrite(UpdateDisplayInfo);
         }
@@ -870,11 +872,14 @@ namespace MicroWinUI
         private async Task UpdateDisplayInfo()
         {
             var currentDisplayMonitor = await GetCurrentDisplayMonitorForCoreWindow();
+            var currentDisplayHdrLevel = GetDisplayHdrLevel(currentDisplayMonitor.DeviceId);
+            var currentHdrCertifications = GetHdrCertificationsFromDisplayHdrLevel(currentDisplayHdrLevel);
             var capabilities = displayEnhancementOverride.GetCurrentDisplayEnhancementOverrideCapabilities();
             var brightnessLevel = Brightness.TryGetCurrentBrightnessLevel();
             var brightnessNits = TryGetNitsFromBrightnessLevel(brightnessLevel);
             AdvancedColorInfo colorInfo = null;
-            await this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => {
+            await this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
                 colorInfo = displayInfo.GetAdvancedColorInfo();
             });
             var advancedColor = colorInfo.CurrentAdvancedColorKind;
@@ -896,7 +901,8 @@ namespace MicroWinUI
             }
             var nitsRanges = capabilities.GetSupportedNitRanges();
 
-            await this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () => {
+            await this.coreWindow.Dispatcher.RunAsync(CoreDispatcherPriority.Normal, () =>
+            {
                 // 重建表格
                 displayInfoTable.Children.Clear();
                 displayInfoTable.RowDefinitions.Clear();
@@ -930,7 +936,7 @@ namespace MicroWinUI
                         Margin = new Thickness(0, 4, 12, 4),
                         TextWrapping = TextWrapping.NoWrap,
                         HorizontalAlignment = HorizontalAlignment.Left,
-                        VerticalAlignment = VerticalAlignment.Center
+                        VerticalAlignment = VerticalAlignment.Top
                     };
                     var valueBlock = new TextBlock
                     {
@@ -940,7 +946,7 @@ namespace MicroWinUI
                         Margin = new Thickness(12, 4, 0, 4),
                         TextWrapping = TextWrapping.Wrap,
                         HorizontalAlignment = HorizontalAlignment.Stretch,
-                        VerticalAlignment = VerticalAlignment.Center
+                        VerticalAlignment = VerticalAlignment.Top
                     };
 
                     Grid.SetRow(keyBlock, rowIndex);
@@ -967,6 +973,18 @@ namespace MicroWinUI
                         : $"{sdrBrightness}%";
                     addRow("系统 SDR 亮度", sdrValue);
                 }
+                addSeparator();
+
+                string allHdrCert = "";
+                if (currentHdrCertifications.Length == 0)
+                {
+                    allHdrCert = "无";
+                }
+                else
+                {
+                    allHdrCert = string.Join("\n", currentHdrCertifications);
+                }
+                addRow("HDR 认证", allHdrCert);
                 addSeparator();
 
                 addRow("HDR10", colorInfo.IsHdrMetadataFormatCurrentlySupported(HdrMetadataFormat.Hdr10) ? "支持" : "不支持");
@@ -1013,6 +1031,163 @@ namespace MicroWinUI
                     sdrBoostSliderLabel.Text = "SDR 内容亮度";
                 }
             });
+        }
+
+        private string[] GetHdrCertificationsFromDisplayHdrLevel(string[] displayHdrLevel)
+        {
+            List<string> certifications = new List<string>();
+            foreach (var line in displayHdrLevel)
+            {
+                switch (line.ToUpper().Trim())
+                {
+                    case "20C5A9AF-CD1A-42B1-AA71-4C96A273DEF1":
+                        certifications.Add("VESA DisplayHDR 400 (1.0)");
+                        break;
+
+                    case "0D710BC2-6368-4EB2-A829-CBBD45CE3BD2":
+                        certifications.Add("VESA DisplayHDR 400 (1.1)");
+                        break;
+
+                    case "C47B4522-B803-47B0-831F-2ED63B56CE79":
+                        certifications.Add("VESA DisplayHDR 500 (1.1)");
+                        break;
+
+                    case "D4C5928E-9488-46AF-8DA8-4F996EE4177F":
+                        certifications.Add("VESA DisplayHDR 600 (1.0)");
+                        break;
+
+                    case "7134A821-9254-4AF4-9973-95B3FCF720CC":
+                        certifications.Add("VESA DisplayHDR 600 (1.1)");
+                        break;
+
+                    case "78137DFC-3400-412E-B0AF-08120754623A":
+                        certifications.Add("VESA DisplayHDR 1000 (1.0)");
+                        break;
+
+                    case "C624859D-304A-4DE8-86DC-8BE82B79527A":
+                        certifications.Add("VESA DisplayHDR 1000 (1.1)");
+                        break;
+
+                    case "3CA0903F-99E0-46FB-9BEC-DE023507BEF0":
+                        certifications.Add("VESA DisplayHDR 1400 (1.1)");
+                        break;
+
+                    case "80931144-16F1-4710-91F4-2E66713B134D":
+                        certifications.Add("VESA DisplayHDR 2000 (1.1)");
+                        break;
+
+                    case "1A6CBAFB-15FF-4CF0-AD75-12360E9B9F4A":
+                        certifications.Add("VESA DisplayHDR 400 True Black (1.0)");
+                        break;
+
+                    case "FB4CB49B-F5A8-4084-800C-EB38E9CA16DE":
+                        certifications.Add("VESA DisplayHDR 400 True Black (1.1)");
+                        break;
+
+                    case "86413F8C-0CDB-4D49-81F7-06BB64A8FED1":
+                        certifications.Add("VESA DisplayHDR 500 True Black (1.0)");
+                        break;
+
+                    case "3B6DAA9E-3794-4D85-897E-93AE990D275D":
+                        certifications.Add("VESA DisplayHDR 500 True Black (1.1)");
+                        break;
+
+                    case "9AD0FB30-006E-49FE-AA15-8F65F28A476B":
+                        certifications.Add("VESA DisplayHDR 600 True Black (1.1)");
+                        break;
+
+                    case "9C5D5F59-1FA8-4D2B-87DD-2E3B2BFF37D5":
+                        certifications.Add("VESA DisplayHDR 1000 True Black (1.1)");
+                        break;
+
+                    case "6363AA90-A651-4154-A9E1-2D765C08E68F":
+                        certifications.Add("Dolby Vision");
+                        break;
+
+                    case "35FBD985-74F0-4271-AC61-295F11D71AEF":
+                        certifications.Add("NVIDIA G-SYNC ULTIMATE");
+                        break;
+
+                    case "F9310F0E-93B2-4A58-8642-17358D8CB2E3":
+                        certifications.Add("AMD Freesync Premium Pro");
+                        break;
+                }
+            }
+            return certifications.ToArray();
+        }
+
+        private string[] GetDisplayHdrLevel(string deviceInterfacePath)
+        {
+            // 将 Device Interface Path 转换为 Registry Enum Path
+            // 格式: \\?\DISPLAY#AUS3266#...#{GUID}  ->  DISPLAY\AUS3266\...
+
+            // 去掉开头的 \\?\
+            if (deviceInterfacePath.StartsWith(@"\\?\"))
+            {
+                deviceInterfacePath = deviceInterfacePath.Substring(4);
+            }
+
+            // 去掉结尾的 GUID (格式为 #{...})
+            int lastHashIndex = deviceInterfacePath.LastIndexOf('#');
+            if (lastHashIndex > -1)
+            {
+                deviceInterfacePath = deviceInterfacePath.Substring(0, lastHashIndex);
+            }
+
+            // 将剩余部分的 # 替换为 \ 以匹配注册表结构
+            string enumPath = deviceInterfacePath.Replace('#', '\\');
+
+            Console.WriteLine($"推导出的 Enum 路径: {enumPath}");
+
+            // 打开 Enum 键获取 Driver 引用
+            string enumKeyPath = $@"SYSTEM\CurrentControlSet\Enum\{enumPath}";
+            string driverReference = null;
+
+            using (RegistryKey key = Registry.LocalMachine.OpenSubKey(enumKeyPath))
+            {
+                if (key == null)
+                {
+                    Debug.WriteLine($"无法在注册表中找到设备实例: {enumKeyPath}");
+                    return [];
+                }
+
+                // 读取 "Driver" 值，例如: "{4d36e96e-e325-11ce-bfc1-08002be10318}\0002"
+                driverReference = key.GetValue("Driver")?.ToString();
+            }
+
+            if (string.IsNullOrEmpty(driverReference))
+            {
+                Debug.WriteLine("在该设备节点下未找到 'Driver' 引用值。");
+                return [];
+            }
+
+            Console.WriteLine($"找到 Driver 引用: {driverReference}");
+
+            // 跳转到 Control\Class 键读取最终数据
+            // 目标路径: SYSTEM\CurrentControlSet\Control\Class\{DriverReference}
+            string classKeyPath = $@"SYSTEM\CurrentControlSet\Control\Class\{driverReference}";
+
+            using (RegistryKey classKey = Registry.LocalMachine.OpenSubKey(classKeyPath))
+            {
+                if (classKey == null)
+                {
+                    return [];
+                }
+                // 读取 DisplayHdrLevel
+                var rawValue = classKey.GetValue("DisplayHdrLevel");
+                if (rawValue is string[] multiLines)
+                {
+                    return multiLines;
+                }
+                else if (rawValue is string singleLine)
+                {
+                    return [singleLine];
+                }
+                else
+                {
+                    return [];
+                }
+            }
         }
 
         private async Task BuildBrightnessMappingAsync()
