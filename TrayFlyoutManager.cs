@@ -122,6 +122,7 @@ namespace MicroWinUICore
                 StartPosition = FormStartPosition.Manual,
                 Location = cursor,
                 ClientSize = new System.Drawing.Size(0, 0), // give room for flyout hit-test
+                Opacity = 0,
                 TopMost = true,
                 Text = string.Empty
             };

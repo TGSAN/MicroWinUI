@@ -6,8 +6,6 @@ using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
-using System.Runtime.ConstrainedExecution;
-using System.Text;
 using System.Threading; // for ConcurrentDictionary
 using System.Threading.Channels;
 using System.Threading.Tasks;
@@ -49,6 +47,7 @@ namespace MicroWinUI
         StackPanel verticalContainer; // vertical stack of left/right sections
         TextBlock sdrBoostSliderLabel;
         Slider sdrBoostSlider;
+        double latestSetSdrBoostSliderValue = 0;
         bool sdrBoostSliderDraging = false;
         public ToggleSwitch laptopKeepHDRBrightnessModeToggleSwitch;
         string sdrDemoPath = Environment.GetFolderPath(Environment.SpecialFolder.Windows) + @"\SystemResources\Windows.UI.SettingsAppThreshold\SystemSettings\Assets\SDRSample.mkv";
@@ -574,7 +573,7 @@ namespace MicroWinUI
         private void SdrBoostSlider_ValueChanged(object sender, Windows.UI.Xaml.Controls.Primitives.RangeBaseValueChangedEventArgs e)
         {
             var slider = sender as Slider;
-            if (slider.FocusState != FocusState.Unfocused)
+            if (latestSetSdrBoostSliderValue != e.NewValue)
             {
                 var nits = (((float)sdrBoostSlider.Value) * 4.0f) + 80; // 0-100 映射到 80-480 Nits
                 Debug.WriteLine($"Set {nits} Nits");
@@ -593,6 +592,7 @@ namespace MicroWinUI
                         _ = SdrWhiteLevel.TrySetForWindow(hwnd, nits);
                     }
                 }
+                latestSetSdrBoostSliderValue = e.NewValue;
             }
         }
 
@@ -1010,7 +1010,8 @@ namespace MicroWinUI
 
                 if (!sdrBoostSliderDraging)
                 {
-                    sdrBoostSlider.Value = ((colorInfo.SdrWhiteLevelInNits - 80) / 4); // 80-480 Nits 映射到 0-100 滑块
+                    latestSetSdrBoostSliderValue = ((colorInfo.SdrWhiteLevelInNits - 80) / 4); // 80-480 Nits 映射到 0-100 滑块
+                    sdrBoostSlider.Value = latestSetSdrBoostSliderValue;
                 }
                 if (capabilities.IsBrightnessNitsControlSupported)
                 {
