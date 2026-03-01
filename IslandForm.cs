@@ -101,8 +101,10 @@ namespace MicroWinUICore
 
         private void IslandWindow_Activated(object sender, EventArgs e)
         {
+            ExtendFrameIntoClientArea(Handle);
             UpdateTheme();
             UpdateBackdrop();
+            ExtendFrameIntoClientArea(Handle); // DWM 重启需要两次设置 ExtendFrameIntoClientArea 才能生效
         }
 
         private void XamlHost_SizeChanged(object sender, EventArgs e)
