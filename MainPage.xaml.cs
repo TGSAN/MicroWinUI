@@ -31,6 +31,8 @@ namespace MicroWinUI
         private IslandWindow coreWindowHost;
         private CanvasBitmap rawBitmap; // 用于保存的原始数据
         private bool isHdrImage = false; // 源图像是否为 HDR（浮点格式，scRGB 线性空间）
+        private BitmapImage _fullImageSource;    // 缓存全图 BitmapImage，避免重复编解码
+        private BitmapImage _currentDisplaySource; // 缓存当前显示的 BitmapImage
         private bool _isHandMode = false;
         private Windows.Foundation.Point? _lastDragPoint;
         // 惯性滚动相关字段
@@ -45,6 +47,21 @@ namespace MicroWinUI
         private readonly List<List<Windows.UI.Input.Inking.InkStroke>> _inkHistory = new List<List<Windows.UI.Input.Inking.InkStroke>>();
         private int _inkHistoryIndex = -1;
         private bool _isUndoRedoing;
+
+        // 虚拟裁剪：始终保留原始 rawBitmap，裁剪仅记录坐标区域
+        private Windows.Foundation.Rect _cropPixelRect;
+        private bool _isInFullImageCropMode;
+        private float _preCropZoom;
+        private double _preCropHOffset, _preCropVOffset;
+        private readonly Stack<CropState> _cropUndoStack = new Stack<CropState>();
+        private readonly Stack<CropState> _cropRedoStack = new Stack<CropState>();
+
+        private class CropState
+        {
+            public Windows.Foundation.Rect CropPixelRect;
+            public List<List<Windows.UI.Input.Inking.InkStroke>> InkHistory;
+            public int InkHistoryIndex;
+        }
 
         public MainPage(IslandWindow coreWindowHost)
         {
@@ -107,6 +124,8 @@ namespace MicroWinUI
                         await bitmapImage.SetSourceAsync(stream);
 
                         DisplayImage.Source = bitmapImage;
+                        _fullImageSource = bitmapImage;
+                        _currentDisplaySource = bitmapImage;
 
                         // 调整 InkCanvas 尺寸以匹配图片像素尺寸 (Image Stretch=None)
                         // 注意：如果 DisplayImage 进行了缩放(Zoom)，InkCanvas 应该放在 ScrollViewer 内部随之缩放，
@@ -127,6 +146,7 @@ namespace MicroWinUI
                         var device = CanvasDevice.GetSharedDevice();
                         rawBitmap?.Dispose();
                         rawBitmap = await CanvasBitmap.LoadAsync(device, stream);
+                        _cropPixelRect = new Windows.Foundation.Rect(0, 0, rawBitmap.SizeInPixels.Width, rawBitmap.SizeInPixels.Height);
 
                         isHdrImage = rawBitmap.Format == DirectXPixelFormat.R16G16B16A16Float ||
                                      rawBitmap.Format == DirectXPixelFormat.R32G32B32A32Float ||
@@ -140,8 +160,9 @@ namespace MicroWinUI
                         MainInkToolbar.IsEnabled = true;
                         EnableHandMode();
 
-                        // 清除旧笔迹并重置撤销历史
+                        // 清除旧笔迹并重置全部撤销历史
                         inkCanvas.InkPresenter.StrokeContainer.Clear();
+                        ClearCropHistory();
                         ResetInkHistory();
                     }
                 }
@@ -197,10 +218,29 @@ namespace MicroWinUI
                         var strokes = inkCanvas.InkPresenter.StrokeContainer.GetStrokes();
                         bool hasInk = strokes.Count > 0;
 
+                        bool fullImage = _cropPixelRect.X == 0 && _cropPixelRect.Y == 0 &&
+                            Math.Abs(_cropPixelRect.Width - rawBitmap.SizeInPixels.Width) < 1 &&
+                            Math.Abs(_cropPixelRect.Height - rawBitmap.SizeInPixels.Height) < 1;
+
                         if (!hasInk)
                         {
-                            // 无笔迹快速路径：跳过渲染管线，直接保存原始位图
-                            await rawBitmap.SaveAsync(stream, saveFormat);
+                            if (fullImage)
+                            {
+                                await rawBitmap.SaveAsync(stream, saveFormat);
+                            }
+                            else
+                            {
+                                using (var cropped = new CanvasRenderTarget(device,
+                                    (float)_cropPixelRect.Width, (float)_cropPixelRect.Height,
+                                    rawBitmap.Dpi, rawBitmap.Format, CanvasAlphaMode.Premultiplied))
+                                {
+                                    using (var ds = cropped.CreateDrawingSession())
+                                    {
+                                        ds.DrawImage(rawBitmap, (float)-_cropPixelRect.X, (float)-_cropPixelRect.Y);
+                                    }
+                                    await cropped.SaveAsync(stream, saveFormat);
+                                }
+                            }
                         }
                         else
                         {
@@ -208,15 +248,15 @@ namespace MicroWinUI
                                 ? DirectXPixelFormat.R16G16B16A16Float
                                 : DirectXPixelFormat.B8G8R8A8UIntNormalized;
 
-                            float scaleX = (float)(rawBitmap.SizeInPixels.Width / inkCanvas.Width);
-                            float scaleY = (float)(rawBitmap.SizeInPixels.Height / inkCanvas.Height);
+                            float scaleX = (float)(_cropPixelRect.Width / inkCanvas.Width);
+                            float scaleY = (float)(_cropPixelRect.Height / inkCanvas.Height);
                             bool validScale = !float.IsNaN(scaleX) && !float.IsNaN(scaleY)
                                            && !float.IsInfinity(scaleX) && !float.IsInfinity(scaleY);
 
                             using (var renderTarget = new CanvasRenderTarget(
                                 device,
-                                (float)rawBitmap.SizeInPixels.Width,
-                                (float)rawBitmap.SizeInPixels.Height,
+                                (float)_cropPixelRect.Width,
+                                (float)_cropPixelRect.Height,
                                 96.0f,
                                 renderFormat,
                                 CanvasAlphaMode.Premultiplied))
@@ -236,7 +276,9 @@ namespace MicroWinUI
                                         using (var ds = renderTarget.CreateDrawingSession())
                                         {
                                             ds.Clear(Windows.UI.Colors.Transparent);
-                                            ds.DrawImage(rawBitmap, new Windows.Foundation.Rect(0, 0, renderTarget.Size.Width, renderTarget.Size.Height));
+                                            ds.DrawImage(rawBitmap,
+                                                new Windows.Foundation.Rect(0, 0, _cropPixelRect.Width, _cropPixelRect.Height),
+                                                _cropPixelRect);
 
                                             float sdrWhiteGain = 1.0f;
                                             try
@@ -284,7 +326,9 @@ namespace MicroWinUI
                                     using (var ds = renderTarget.CreateDrawingSession())
                                     {
                                         ds.Clear(Windows.UI.Colors.Transparent);
-                                        ds.DrawImage(rawBitmap, new Windows.Foundation.Rect(0, 0, renderTarget.Size.Width, renderTarget.Size.Height));
+                                        ds.DrawImage(rawBitmap,
+                                            new Windows.Foundation.Rect(0, 0, _cropPixelRect.Width, _cropPixelRect.Height),
+                                            _cropPixelRect);
 
                                         if (validScale)
                                             ds.Transform = Matrix3x2.CreateScale(scaleX, scaleY);
@@ -304,18 +348,65 @@ namespace MicroWinUI
             }
         }
 
-        private void CropButton_Click(object sender, RoutedEventArgs e)
+        private async void CropButton_Click(object sender, RoutedEventArgs e)
         {
             if (rawBitmap == null) return;
 
-            // 界面状态: 开启裁剪，关闭抓手
             CropButton.IsChecked = true;
             HandToolButton.IsChecked = false;
             MainInkToolbar.ActiveTool = null;
 
-            // 初始化并显示裁剪控件（工具栏由 SelectionChanged 事件控制）
-            cropControl.Visibility = Visibility.Visible;
-            cropControl.Initialize(DisplayImage.ActualWidth, DisplayImage.ActualHeight);
+            bool hasCrop = _cropPixelRect.X != 0 || _cropPixelRect.Y != 0 ||
+                Math.Abs(_cropPixelRect.Width - rawBitmap.SizeInPixels.Width) >= 1 ||
+                Math.Abs(_cropPixelRect.Height - rawBitmap.SizeInPixels.Height) >= 1;
+
+            if (hasCrop)
+            {
+                _isInFullImageCropMode = true;
+
+                _preCropZoom = MainScrollViewer.ZoomFactor;
+                _preCropHOffset = MainScrollViewer.HorizontalOffset;
+                _preCropVOffset = MainScrollViewer.VerticalOffset;
+
+                var displayInfo = DisplayInformation.GetForCurrentView();
+                double dpiScale = displayInfo.RawPixelsPerViewPixel;
+                double fullWidth = rawBitmap.SizeInPixels.Width / dpiScale;
+                double fullHeight = rawBitmap.SizeInPixels.Height / dpiScale;
+
+                DisplayImage.Source = _fullImageSource;
+                DisplayImage.Width = fullWidth;
+                DisplayImage.Height = fullHeight;
+                inkCanvas.Visibility = Visibility.Collapsed;
+
+                double pixelToUI = fullWidth / rawBitmap.SizeInPixels.Width;
+                var uiSelection = new Windows.Foundation.Rect(
+                    _cropPixelRect.X * pixelToUI,
+                    _cropPixelRect.Y * pixelToUI,
+                    _cropPixelRect.Width * pixelToUI,
+                    _cropPixelRect.Height * pixelToUI);
+
+                cropControl.Visibility = Visibility.Visible;
+                cropControl.Initialize(fullWidth, fullHeight, uiSelection);
+
+                // 等待布局完成后将视口居中到裁剪区域
+                float zoom = _preCropZoom;
+                _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, () =>
+                {
+                    double vpW = MainScrollViewer.ViewportWidth;
+                    double vpH = MainScrollViewer.ViewportHeight;
+                    double cx = (uiSelection.X + uiSelection.Width / 2) * zoom;
+                    double cy = (uiSelection.Y + uiSelection.Height / 2) * zoom;
+                    MainScrollViewer.ChangeView(
+                        Math.Max(0, cx - vpW / 2),
+                        Math.Max(0, cy - vpH / 2),
+                        zoom, true);
+                });
+            }
+            else
+            {
+                cropControl.Visibility = Visibility.Visible;
+                cropControl.Initialize(DisplayImage.ActualWidth, DisplayImage.ActualHeight);
+            }
         }
 
         private void CropControl_SelectionChanged(object sender, bool hasSelection)
@@ -323,14 +414,32 @@ namespace MicroWinUI
             CropButtonPanel.Visibility = hasSelection ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void CropControl_CropCancelled(object sender, EventArgs e)
+        private async void CropControl_CropCancelled(object sender, EventArgs e)
         {
             cropControl.Visibility = Visibility.Collapsed;
             CropButtonPanel.Visibility = Visibility.Collapsed;
-
-            // 退出裁剪
             CropButton.IsChecked = false;
-            // 恢复抓手? 由调用方决定
+
+            if (_isInFullImageCropMode)
+            {
+                _isInFullImageCropMode = false;
+
+                var displayInfo = DisplayInformation.GetForCurrentView();
+                double dpiScale = displayInfo.RawPixelsPerViewPixel;
+                DisplayImage.Width = _cropPixelRect.Width / dpiScale;
+                DisplayImage.Height = _cropPixelRect.Height / dpiScale;
+                inkCanvas.Visibility = Visibility.Visible;
+
+                if (_currentDisplaySource != null)
+                    DisplayImage.Source = _currentDisplaySource;
+                else
+                    await UpdateDisplayAsync();
+
+                _ = Dispatcher.RunAsync(Windows.UI.Core.CoreDispatcherPriority.Low, () =>
+                {
+                    MainScrollViewer.ChangeView(_preCropHOffset, _preCropVOffset, _preCropZoom, true);
+                });
+            }
         }
 
         private async void CropControl_CropConfirmed(object sender, Windows.Foundation.Rect uiCropRect)
@@ -339,86 +448,72 @@ namespace MicroWinUI
             {
                 cropControl.Visibility = Visibility.Collapsed;
                 CropButtonPanel.Visibility = Visibility.Collapsed;
-
                 CropButton.IsChecked = false;
                 EnableHandMode();
 
-                // 1. 计算图片空间的裁剪区域
-                double scaleFactor = rawBitmap.SizeInPixels.Width / DisplayImage.ActualWidth;
-                Windows.Foundation.Rect pixelRect = new Windows.Foundation.Rect(
-                    Math.Round(uiCropRect.X * scaleFactor),
-                    Math.Round(uiCropRect.Y * scaleFactor),
-                    Math.Round(uiCropRect.Width * scaleFactor),
-                    Math.Round(uiCropRect.Height * scaleFactor));
+                bool wasFullImage = _isInFullImageCropMode;
+                _isInFullImageCropMode = false;
 
-                var device = CanvasDevice.GetSharedDevice();
+                _cropUndoStack.Push(CaptureCurrentCropState());
+                _cropRedoStack.Clear();
 
-                // 2. 裁剪图片 (创建新的 rawBitmap)
-                // 使用 RenderTarget 绘制原图的指定区域到新画布
-                var newBitmap = new CanvasRenderTarget(
-                    device,
-                    (float)pixelRect.Width,
-                    (float)pixelRect.Height,
-                    rawBitmap.Dpi,
-                    rawBitmap.Format,
-                    CanvasAlphaMode.Premultiplied);
+                var displayInfo = DisplayInformation.GetForCurrentView();
+                double dpiScale = displayInfo.RawPixelsPerViewPixel;
+                var oldCropPixelRect = _cropPixelRect;
 
-                using (var ds = newBitmap.CreateDrawingSession())
+                if (wasFullImage)
                 {
-                    ds.Clear(Windows.UI.Colors.Transparent);
-                    // 将原图向左上移动，相当于截取 cropRect 区域
-                    ds.DrawImage(rawBitmap, (float)-pixelRect.X, (float)-pixelRect.Y);
-                }
+                    // uiCropRect 相对于全图显示，直接映射到像素坐标
+                    double scaleToPixel = rawBitmap.SizeInPixels.Width / DisplayImage.ActualWidth;
+                    _cropPixelRect = new Windows.Foundation.Rect(
+                        uiCropRect.X * scaleToPixel,
+                        uiCropRect.Y * scaleToPixel,
+                        uiCropRect.Width * scaleToPixel,
+                        uiCropRect.Height * scaleToPixel);
 
-                rawBitmap?.Dispose();
-                rawBitmap = newBitmap;
-
-                // 3. 更新笔迹位置
-                // 笔迹使用的是 UI 坐标系 (DisplayImage.ActualWidth x ActualHeight)
-                // 裁剪掉左上角 (X, Y)，相当于所有笔迹向左上平移 (-X, -Y)
-                var container = inkCanvas.InkPresenter.StrokeContainer;
-                var strokes = container.GetStrokes();
-                if (strokes.Count > 0)
-                {
-                    // 创建平移矩阵
-                    var translation = Matrix3x2.CreateTranslation((float)-uiCropRect.X, (float)-uiCropRect.Y);
-
-                    foreach (var stroke in strokes)
+                    // 笔迹从旧裁剪坐标系平移到新裁剪坐标系
+                    float dx = (float)((oldCropPixelRect.X - _cropPixelRect.X) / dpiScale);
+                    float dy = (float)((oldCropPixelRect.Y - _cropPixelRect.Y) / dpiScale);
+                    var strokes = inkCanvas.InkPresenter.StrokeContainer.GetStrokes();
+                    if (strokes.Count > 0 && (Math.Abs(dx) > 0.001 || Math.Abs(dy) > 0.001))
                     {
-                        var transform = stroke.PointTransform;
-                        stroke.PointTransform = Matrix3x2.Multiply(transform, translation);
+                        var translation = Matrix3x2.CreateTranslation(dx, dy);
+                        foreach (var stroke in strokes)
+                            stroke.PointTransform = Matrix3x2.Multiply(stroke.PointTransform, translation);
                     }
 
-                    // 必须重新赋值 strokes 吗？InkStroke 是引用对象，修改属性应即时生效。
-                    // 但为了触发重绘，可能需要一点操作。MoveSelected 是官方推荐。
-                    // 但 InkStroke.PointTransform 文档说 "This property is read/write".
+                    inkCanvas.Visibility = Visibility.Visible;
                 }
-
-                // 4. 更新显示的 Image
-                // 将新的 rawBitmap 转回 BitmapImage 以显示 (保留 HDR 能力)
-                using (var stream = new InMemoryRandomAccessStream())
+                else
                 {
-                    var intermediateFormat = isHdrImage ? CanvasBitmapFileFormat.JpegXR : CanvasBitmapFileFormat.Png;
-                    await rawBitmap.SaveAsync(stream, intermediateFormat);
-                    stream.Seek(0);
+                    // uiCropRect 相对于当前裁剪后的显示
+                    double scaleX = _cropPixelRect.Width / DisplayImage.ActualWidth;
+                    double scaleY = _cropPixelRect.Height / DisplayImage.ActualHeight;
+                    _cropPixelRect = new Windows.Foundation.Rect(
+                        _cropPixelRect.X + uiCropRect.X * scaleX,
+                        _cropPixelRect.Y + uiCropRect.Y * scaleY,
+                        uiCropRect.Width * scaleX,
+                        uiCropRect.Height * scaleY);
 
-                    var newImg = new BitmapImage();
-                    newImg.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-                    await newImg.SetSourceAsync(stream);
-                    DisplayImage.Source = newImg;
+                    var strokes = inkCanvas.InkPresenter.StrokeContainer.GetStrokes();
+                    if (strokes.Count > 0)
+                    {
+                        var translation = Matrix3x2.CreateTranslation((float)-uiCropRect.X, (float)-uiCropRect.Y);
+                        foreach (var stroke in strokes)
+                            stroke.PointTransform = Matrix3x2.Multiply(stroke.PointTransform, translation);
+                    }
                 }
 
-                // 5. 更新控件尺寸
-                DisplayImage.Width = uiCropRect.Width;
-                DisplayImage.Height = uiCropRect.Height;
-                inkCanvas.Width = uiCropRect.Width;
-                inkCanvas.Height = uiCropRect.Height;
+                // 更新控件尺寸
+                double newW = _cropPixelRect.Width / dpiScale;
+                double newH = _cropPixelRect.Height / dpiScale;
+                DisplayImage.Width = newW;
+                DisplayImage.Height = newH;
+                inkCanvas.Width = newW;
+                inkCanvas.Height = newH;
 
-                // 裁剪后笔迹已变换，重置撤销历史
+                await UpdateDisplayAsync();
                 ResetInkHistory();
-
-                // 清除裁剪控件的状态
-                // (Optional: 可以在 CropControl.Initialize 里重置)
             }
             catch (Exception ex)
             {
@@ -598,6 +693,8 @@ namespace MicroWinUI
                 snapshot.Add(s.Clone());
             _inkHistory.Add(snapshot);
             _inkHistoryIndex++;
+
+            _cropRedoStack.Clear();
         }
 
         private void ResetInkHistory()
@@ -607,26 +704,146 @@ namespace MicroWinUI
             SaveInkState();
         }
 
+        private List<List<Windows.UI.Input.Inking.InkStroke>> CloneInkHistory()
+        {
+            var clone = new List<List<Windows.UI.Input.Inking.InkStroke>>();
+            foreach (var snapshot in _inkHistory)
+            {
+                var s = new List<Windows.UI.Input.Inking.InkStroke>();
+                foreach (var stroke in snapshot)
+                    s.Add(stroke.Clone());
+                clone.Add(s);
+            }
+            return clone;
+        }
+
+        private void ClearCropHistory()
+        {
+            _cropUndoStack.Clear();
+            _cropRedoStack.Clear();
+        }
+
+        private async Task UpdateDisplayAsync()
+        {
+            bool fullImage = _cropPixelRect.X == 0 && _cropPixelRect.Y == 0 &&
+                Math.Abs(_cropPixelRect.Width - rawBitmap.SizeInPixels.Width) < 1 &&
+                Math.Abs(_cropPixelRect.Height - rawBitmap.SizeInPixels.Height) < 1;
+
+            if (fullImage && _fullImageSource != null)
+            {
+                DisplayImage.Source = _fullImageSource;
+                _currentDisplaySource = _fullImageSource;
+                return;
+            }
+
+            using (var stream = new InMemoryRandomAccessStream())
+            {
+                var fmt = isHdrImage ? CanvasBitmapFileFormat.JpegXR : CanvasBitmapFileFormat.Png;
+
+                var device = CanvasDevice.GetSharedDevice();
+                using (var rt = new CanvasRenderTarget(device,
+                    (float)_cropPixelRect.Width, (float)_cropPixelRect.Height,
+                    rawBitmap.Dpi, rawBitmap.Format, CanvasAlphaMode.Premultiplied))
+                {
+                    using (var ds = rt.CreateDrawingSession())
+                    {
+                        ds.DrawImage(rawBitmap, (float)-_cropPixelRect.X, (float)-_cropPixelRect.Y);
+                    }
+                    await rt.SaveAsync(stream, fmt);
+                }
+
+                stream.Seek(0);
+                var img = new BitmapImage();
+                img.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
+                await img.SetSourceAsync(stream);
+                DisplayImage.Source = img;
+                _currentDisplaySource = img;
+            }
+        }
+
+        private CropState CaptureCurrentCropState()
+        {
+            return new CropState
+            {
+                CropPixelRect = _cropPixelRect,
+                InkHistory = CloneInkHistory(),
+                InkHistoryIndex = _inkHistoryIndex,
+            };
+        }
+
+        private void RestoreCropState(CropState state)
+        {
+            _cropPixelRect = state.CropPixelRect;
+
+            var displayInfo = DisplayInformation.GetForCurrentView();
+            double dpiScale = displayInfo.RawPixelsPerViewPixel;
+            double w = state.CropPixelRect.Width / dpiScale;
+            double h = state.CropPixelRect.Height / dpiScale;
+            DisplayImage.Width = w;
+            DisplayImage.Height = h;
+            inkCanvas.Width = w;
+            inkCanvas.Height = h;
+
+            _inkHistory.Clear();
+            _inkHistory.AddRange(state.InkHistory);
+            _inkHistoryIndex = state.InkHistoryIndex;
+
+            _isUndoRedoing = true;
+            inkCanvas.InkPresenter.StrokeContainer.Clear();
+            if (_inkHistoryIndex >= 0 && _inkHistoryIndex < _inkHistory.Count)
+            {
+                foreach (var s in _inkHistory[_inkHistoryIndex])
+                    inkCanvas.InkPresenter.StrokeContainer.AddStroke(s.Clone());
+            }
+            _isUndoRedoing = false;
+        }
+
+        private async void CropUndoAsync()
+        {
+            _cropRedoStack.Push(CaptureCurrentCropState());
+            RestoreCropState(_cropUndoStack.Pop());
+            await UpdateDisplayAsync();
+        }
+
+        private async void CropRedoAsync()
+        {
+            _cropUndoStack.Push(CaptureCurrentCropState());
+            RestoreCropState(_cropRedoStack.Pop());
+            await UpdateDisplayAsync();
+        }
+
         internal void InkUndo()
         {
-            if (_inkHistoryIndex <= 0) return;
-            _isUndoRedoing = true;
-            _inkHistoryIndex--;
-            inkCanvas.InkPresenter.StrokeContainer.Clear();
-            foreach (var s in _inkHistory[_inkHistoryIndex])
-                inkCanvas.InkPresenter.StrokeContainer.AddStroke(s.Clone());
-            _isUndoRedoing = false;
+            if (_inkHistoryIndex > 0)
+            {
+                _isUndoRedoing = true;
+                _inkHistoryIndex--;
+                inkCanvas.InkPresenter.StrokeContainer.Clear();
+                foreach (var s in _inkHistory[_inkHistoryIndex])
+                    inkCanvas.InkPresenter.StrokeContainer.AddStroke(s.Clone());
+                _isUndoRedoing = false;
+            }
+            else if (_cropUndoStack.Count > 0)
+            {
+                CropUndoAsync();
+            }
         }
 
         internal void InkRedo()
         {
-            if (_inkHistoryIndex >= _inkHistory.Count - 1) return;
-            _isUndoRedoing = true;
-            _inkHistoryIndex++;
-            inkCanvas.InkPresenter.StrokeContainer.Clear();
-            foreach (var s in _inkHistory[_inkHistoryIndex])
-                inkCanvas.InkPresenter.StrokeContainer.AddStroke(s.Clone());
-            _isUndoRedoing = false;
+            if (_inkHistoryIndex < _inkHistory.Count - 1)
+            {
+                _isUndoRedoing = true;
+                _inkHistoryIndex++;
+                inkCanvas.InkPresenter.StrokeContainer.Clear();
+                foreach (var s in _inkHistory[_inkHistoryIndex])
+                    inkCanvas.InkPresenter.StrokeContainer.AddStroke(s.Clone());
+                _isUndoRedoing = false;
+            }
+            else if (_cropRedoStack.Count > 0)
+            {
+                CropRedoAsync();
+            }
         }
 
         private void OnContentPointerWheelChanged(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)

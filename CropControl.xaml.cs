@@ -70,9 +70,19 @@ namespace MicroWinUI
             _imageWidth = width;
             _imageHeight = height;
 
-            // 初始化时不创建裁剪框，将整个画布调暗
             _hasSelection = false;
             _currentRect = new Rect(0, 0, 0, 0);
+            UpdateVisuals();
+            UpdateSelectionVisibility();
+        }
+
+        public void Initialize(double width, double height, Rect selection)
+        {
+            _imageWidth = width;
+            _imageHeight = height;
+
+            _hasSelection = true;
+            _currentRect = selection;
             UpdateVisuals();
             UpdateSelectionVisibility();
         }
