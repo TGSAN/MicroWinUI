@@ -41,6 +41,11 @@ namespace MicroWinUI
         private const double VelocityThreshold = 0.1;
         private Windows.Foundation.Point _lastPointerInView = new Windows.Foundation.Point(double.NaN, double.NaN);
 
+        // 笔迹撤销/还原
+        private readonly List<List<Windows.UI.Input.Inking.InkStroke>> _inkHistory = new List<List<Windows.UI.Input.Inking.InkStroke>>();
+        private int _inkHistoryIndex = -1;
+        private bool _isUndoRedoing;
+
         public MainPage(IslandWindow coreWindowHost)
         {
             this.coreWindowHost = coreWindowHost;
@@ -57,8 +62,12 @@ namespace MicroWinUI
             ImageGrid.AddHandler(UIElement.PointerWheelChangedEvent,
                 new Windows.UI.Xaml.Input.PointerEventHandler(OnContentPointerWheelChanged), true);
 
-            // 键盘缩放快捷键（XAML Islands 不转发 Ctrl+Key 到 XAML 层，需在消息泵层拦截）
-            System.Windows.Forms.Application.AddMessageFilter(new ZoomMessageFilter(this));
+            // 笔迹撤销/还原：监听绘制和擦除事件
+            inkCanvas.InkPresenter.StrokesCollected += (s2, _) => { if (!_isUndoRedoing) SaveInkState(); };
+            inkCanvas.InkPresenter.StrokesErased += (s2, _) => { if (!_isUndoRedoing) SaveInkState(); };
+
+            // 键盘快捷键（XAML Islands 不转发 Ctrl+Key 到 XAML 层，需在消息泵层拦截）
+            System.Windows.Forms.Application.AddMessageFilter(new ShortcutMessageFilter(this));
         }
 
         private async void OpenButton_Click(object sender, RoutedEventArgs e)
@@ -131,8 +140,9 @@ namespace MicroWinUI
                         MainInkToolbar.IsEnabled = true;
                         EnableHandMode();
 
-                        // 清除旧笔迹
+                        // 清除旧笔迹并重置撤销历史
                         inkCanvas.InkPresenter.StrokeContainer.Clear();
+                        ResetInkHistory();
                     }
                 }
             }
@@ -404,6 +414,9 @@ namespace MicroWinUI
                 inkCanvas.Width = uiCropRect.Width;
                 inkCanvas.Height = uiCropRect.Height;
 
+                // 裁剪后笔迹已变换，重置撤销历史
+                ResetInkHistory();
+
                 // 清除裁剪控件的状态
                 // (Optional: 可以在 CropControl.Initialize 里重置)
             }
@@ -575,6 +588,47 @@ namespace MicroWinUI
                 StopInertia();
             }
         }
+        private void SaveInkState()
+        {
+            if (_inkHistoryIndex < _inkHistory.Count - 1)
+                _inkHistory.RemoveRange(_inkHistoryIndex + 1, _inkHistory.Count - _inkHistoryIndex - 1);
+
+            var snapshot = new List<Windows.UI.Input.Inking.InkStroke>();
+            foreach (var s in inkCanvas.InkPresenter.StrokeContainer.GetStrokes())
+                snapshot.Add(s.Clone());
+            _inkHistory.Add(snapshot);
+            _inkHistoryIndex++;
+        }
+
+        private void ResetInkHistory()
+        {
+            _inkHistory.Clear();
+            _inkHistoryIndex = -1;
+            SaveInkState();
+        }
+
+        internal void InkUndo()
+        {
+            if (_inkHistoryIndex <= 0) return;
+            _isUndoRedoing = true;
+            _inkHistoryIndex--;
+            inkCanvas.InkPresenter.StrokeContainer.Clear();
+            foreach (var s in _inkHistory[_inkHistoryIndex])
+                inkCanvas.InkPresenter.StrokeContainer.AddStroke(s.Clone());
+            _isUndoRedoing = false;
+        }
+
+        internal void InkRedo()
+        {
+            if (_inkHistoryIndex >= _inkHistory.Count - 1) return;
+            _isUndoRedoing = true;
+            _inkHistoryIndex++;
+            inkCanvas.InkPresenter.StrokeContainer.Clear();
+            foreach (var s in _inkHistory[_inkHistoryIndex])
+                inkCanvas.InkPresenter.StrokeContainer.AddStroke(s.Clone());
+            _isUndoRedoing = false;
+        }
+
         private void OnContentPointerWheelChanged(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
             if (e.Pointer.PointerDeviceType != Windows.Devices.Input.PointerDeviceType.Mouse) return;
@@ -636,19 +690,20 @@ namespace MicroWinUI
         public bool IsCheckedNegation(bool? value) => !(value == true);
     }
 
-    internal class ZoomMessageFilter : System.Windows.Forms.IMessageFilter
+    internal class ShortcutMessageFilter : System.Windows.Forms.IMessageFilter
     {
         private const int WM_KEYDOWN = 0x0100;
         private const float ZoomStep = 1.25f;
         private readonly MainPage _page;
 
-        public ZoomMessageFilter(MainPage page) { _page = page; }
+        public ShortcutMessageFilter(MainPage page) { _page = page; }
 
         public bool PreFilterMessage(ref System.Windows.Forms.Message m)
         {
             if (m.Msg != WM_KEYDOWN) return false;
             if ((System.Windows.Forms.Control.ModifierKeys & System.Windows.Forms.Keys.Control) == 0) return false;
 
+            bool shift = (System.Windows.Forms.Control.ModifierKeys & System.Windows.Forms.Keys.Shift) != 0;
             var key = (System.Windows.Forms.Keys)(int)m.WParam;
             switch (key)
             {
@@ -663,6 +718,13 @@ namespace MicroWinUI
                 case System.Windows.Forms.Keys.D0:
                 case System.Windows.Forms.Keys.NumPad0:
                     _page.ZoomToFactor(1.0f);
+                    return true;
+                case System.Windows.Forms.Keys.Z:
+                    if (shift) _page.InkRedo();
+                    else _page.InkUndo();
+                    return true;
+                case System.Windows.Forms.Keys.Y:
+                    _page.InkRedo();
                     return true;
                 default:
                     return false;
