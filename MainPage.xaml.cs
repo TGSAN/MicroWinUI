@@ -1,4 +1,4 @@
-﻿using Microsoft.Graphics.Canvas.Effects;
+using Microsoft.Graphics.Canvas.Effects;
 using Microsoft.Graphics.Canvas;
 using MicroWinUICore;
 using System;
@@ -31,6 +31,7 @@ namespace MicroWinUI
     {
         private IslandWindow coreWindowHost;
         private CanvasBitmap rawBitmap; // 用于保存的原始数据
+        private bool isHdrImage = false; // 源图像是否为 HDR（浮点格式，scRGB 线性空间）
         private bool _isHandMode = false;
         private Windows.Foundation.Point? _lastDragPoint;
         // 惯性滚动相关字段
@@ -108,9 +109,15 @@ namespace MicroWinUI
                     using (var stream = await file.OpenReadAsync())
                     {
                         var device = CanvasDevice.GetSharedDevice();
+                        rawBitmap?.Dispose();
                         rawBitmap = await CanvasBitmap.LoadAsync(device, stream);
 
-                        System.Diagnostics.Debug.WriteLine($"Image Loaded. Format: {rawBitmap.Format}, Size: {rawBitmap.SizeInPixels.Width}x{rawBitmap.SizeInPixels.Height}");
+                        isHdrImage = rawBitmap.Format == DirectXPixelFormat.R16G16B16A16Float ||
+                                     rawBitmap.Format == DirectXPixelFormat.R32G32B32A32Float ||
+                                     rawBitmap.Format == DirectXPixelFormat.R32G32B32Float ||
+                                     rawBitmap.Format == DirectXPixelFormat.R11G11B10Float;
+
+                        System.Diagnostics.Debug.WriteLine($"Image Loaded. Format: {rawBitmap.Format}, HDR: {isHdrImage}, Size: {rawBitmap.SizeInPixels.Width}x{rawBitmap.SizeInPixels.Height}");
 
                         // 打开新图片后默认切换回抓手模式
                         SaveButton.IsEnabled = true;
@@ -136,11 +143,21 @@ namespace MicroWinUI
             {
                 var picker = new FileSavePicker();
 
-                // 初始化窗口句柄
                 ((IInitializeWithWindow)(object)picker).Initialize(coreWindowHost.Handle);
 
                 picker.SuggestedStartLocation = PickerLocationId.PicturesLibrary;
-                picker.FileTypeChoices.Add("JPEG XR", new List<string>() { ".jxr" });
+
+                if (isHdrImage)
+                {
+                    picker.FileTypeChoices.Add("JPEG XR", new List<string>() { ".jxr" });
+                }
+                else
+                {
+                    picker.FileTypeChoices.Add("PNG", new List<string>() { ".png" });
+                    picker.FileTypeChoices.Add("JPEG", new List<string>() { ".jpg" });
+                    picker.FileTypeChoices.Add("JPEG XR", new List<string>() { ".jxr" });
+                }
+
                 picker.SuggestedFileName = "EditedImage";
 
                 StorageFile file = await picker.PickSaveFileAsync();
@@ -150,143 +167,116 @@ namespace MicroWinUI
                     {
                         var device = CanvasDevice.GetSharedDevice();
 
-                        // 创建 RenderTarget，尺寸和 DPI 与原始图片一致
-                        // 这样保存出来的图片像素尺寸才会和原图一样
-                        using (var renderTarget = new CanvasRenderTarget(
-                            device,
-                            (float)rawBitmap.SizeInPixels.Width,
-                            (float)rawBitmap.SizeInPixels.Height,
-                            rawBitmap.Dpi,
-                            DirectXPixelFormat.R16G16B16A16Float,
-                            CanvasAlphaMode.Premultiplied))
+                        CanvasBitmapFileFormat saveFormat;
+                        string ext = file.FileType.ToLowerInvariant();
+                        switch (ext)
                         {
-                            using (var ds = renderTarget.CreateDrawingSession())
-                            {
-                                ds.Clear(Windows.UI.Colors.Transparent);
-                                // 绘制原图
-                                ds.DrawImage(rawBitmap);
-
-                                // 绘制笔迹
-                                // 注意：InkCanvas 也是设置为 PixelWidth/Height，所以坐标系应当是一致的 (DIPs = Pixels at 96 DPI logic)
-                                // 如果 rawBitmap.Dpi 不是 96，但 InkCanvas 是按 96 布局的，可能需要 Transform。
-                                // 我们的逻辑是：InkCanvas.Width = BitmapImage.PixelWidth.
-                                // 假设 BitmapImage.PixelWidth == rawBitmap.SizeInPixels.Width.
-                                // InkCanvas 的笔迹坐标是基于其尺寸的。
-                                // RenderTarget 的尺寸也是 SizeInPixels (单位是 DIPs, 如果 DPI=96)。
-                                // 实际上 CanvasRenderTarget(w, h, dpi) -> 物理像素 = w * dpi/96.
-                                // 我们传入了 (SizeInPixels.W, SizeInPixels.H, rawBitmap.Dpi)。
-                                // 物理像素 = SizeInPixels * (Dpi/96)。这可能会导致输出尺寸变大如果 Dpi != 96。
-                                // 为了确保 1:1 输出，我们可以强制 RenderTarget DPI = 96。
-                                // 这样 RenderTarget 的逻辑尺寸(DIPs) = 物理像素尺寸。
-
-                                // 重新创建以确保 1:1
-                            }
+                            case ".png": saveFormat = CanvasBitmapFileFormat.Png; break;
+                            case ".jpg":
+                            case ".jpeg": saveFormat = CanvasBitmapFileFormat.Jpeg; break;
+                            default: saveFormat = CanvasBitmapFileFormat.JpegXR; break;
                         }
 
-                        // 重新修正 Save 逻辑以确保绝对 1:1 (忽略原始 DPI)
-                        // 重新修正 Save 逻辑以确保绝对 1:1 (忽略原始 DPI)
-                        using (var renderTarget = new CanvasRenderTarget(
-                            device,
-                            (float)rawBitmap.SizeInPixels.Width,
-                            (float)rawBitmap.SizeInPixels.Height,
-                            96.0f, // 强制 96 DPI
-                            DirectXPixelFormat.R16G16B16A16Float,
-                            CanvasAlphaMode.Premultiplied))
+                        var strokes = inkCanvas.InkPresenter.StrokeContainer.GetStrokes();
+                        bool hasInk = strokes.Count > 0;
+
+                        if (!hasInk)
                         {
-                            // 1. 先将笔迹绘制到一个临时的 sRGB RenderTarget 上
-                            // 这样我们明确了笔迹是在 sRGB 空间中定义的
-                            using (var inkRenderTarget = new CanvasRenderTarget(
+                            // 无笔迹快速路径：跳过渲染管线，直接保存原始位图
+                            await rawBitmap.SaveAsync(stream, saveFormat);
+                        }
+                        else
+                        {
+                            DirectXPixelFormat renderFormat = isHdrImage
+                                ? DirectXPixelFormat.R16G16B16A16Float
+                                : DirectXPixelFormat.B8G8R8A8UIntNormalized;
+
+                            float scaleX = (float)(rawBitmap.SizeInPixels.Width / inkCanvas.Width);
+                            float scaleY = (float)(rawBitmap.SizeInPixels.Height / inkCanvas.Height);
+                            bool validScale = !float.IsNaN(scaleX) && !float.IsNaN(scaleY)
+                                           && !float.IsInfinity(scaleX) && !float.IsInfinity(scaleY);
+
+                            using (var renderTarget = new CanvasRenderTarget(
                                 device,
                                 (float)rawBitmap.SizeInPixels.Width,
                                 (float)rawBitmap.SizeInPixels.Height,
                                 96.0f,
-                                DirectXPixelFormat.B8G8R8A8UIntNormalized, // 标准 sRGB 格式
+                                renderFormat,
                                 CanvasAlphaMode.Premultiplied))
                             {
-                                using (var dsInk = inkRenderTarget.CreateDrawingSession())
+                                if (isHdrImage)
                                 {
-                                    dsInk.Clear(Windows.UI.Colors.Transparent);
-
-                                    // 计算缩放并应用
-                                    float scaleX = (float)(rawBitmap.SizeInPixels.Width / inkCanvas.Width);
-                                    float scaleY = (float)(rawBitmap.SizeInPixels.Height / inkCanvas.Height);
-                                    if (!float.IsNaN(scaleX) && !float.IsNaN(scaleY) && !float.IsInfinity(scaleX) && !float.IsInfinity(scaleY))
+                                    // HDR 管线：用 CanvasCommandList 捕获笔迹指令，避免分配全分辨率像素缓冲区
+                                    using (var inkCommands = new CanvasCommandList(device))
                                     {
-                                        dsInk.Transform = Matrix3x2.CreateScale(scaleX, scaleY);
-                                    }
-
-                                    dsInk.DrawInk(inkCanvas.InkPresenter.StrokeContainer.GetStrokes());
-                                }
-
-                                // 2. 合成最终图片
-                                using (var ds = renderTarget.CreateDrawingSession())
-                                {
-                                    ds.Clear(Windows.UI.Colors.Transparent);
-
-                                    // 绘制 HDR 原图 (直接保留 rawBitmap 数据)
-                                    ds.DrawImage(rawBitmap, new Windows.Foundation.Rect(0, 0, renderTarget.Size.Width, renderTarget.Size.Height));
-
-                                    // 绘制笔迹层
-                                    // 由于 inkRenderTarget 是 sRGB 的，而目标 renderTarget 是 ScRGB (Linear) 的
-                                    // 我们需要进行 sRGB -> Linear 的转换，即 Gamma 2.2 扩展
-                                    // 这样 0.9 sRGB 才会变成正确的 ~0.79 Linear，而不是被当做 0.9 Linear (过亮)
-                                    // 3. 计算 SDR 白点增益
-                                    // scRGB 标准定义 1.0 = 80 nits。但屏幕的 SDR 白点通常高于 80 nits (e.g. 200 nits)。
-                                    // 为了让 sRGB 笔迹看起来和屏幕上显示的一致 (屏幕上 sRGB White 被映射到了 SdrWhiteLevel)，
-                                    // 我们需要对笔迹应用增益：Gain = SdrWhiteLevel / 80。
-                                    float sdrWhiteGain = 1.0f;
-                                    try
-                                    {
-                                        var mainDisplayInfo = DisplayInformation.GetForCurrentView();
-                                        var colorInfo = mainDisplayInfo.GetAdvancedColorInfo();
-                                        if (colorInfo != null)
+                                        using (var dsInk = inkCommands.CreateDrawingSession())
                                         {
-                                            sdrWhiteGain = (float)colorInfo.SdrWhiteLevelInNits / 80.0f;
+                                            if (validScale)
+                                                dsInk.Transform = Matrix3x2.CreateScale(scaleX, scaleY);
+                                            dsInk.DrawInk(strokes);
                                         }
-                                    }
-                                    catch { /* Fallback to 1.0 */ }
 
-                                    // 4. 生成 sRGB -> Linear 的查找表 (Look-Up Table)
-                                    // 这比简单的 Gamma 2.2 更精确，因为它遵循 sRGB 的分段函数定义
-                                    float[] srgbToLinearTable = new float[256];
-                                    for (int i = 0; i < 256; i++)
-                                    {
-                                        float u = i / 255.0f; // 归一化输入
-                                        float val;
-                                        if (u <= 0.04045f)
+                                        using (var ds = renderTarget.CreateDrawingSession())
                                         {
-                                            val = u / 12.92f;
-                                        }
-                                        else
-                                        {
-                                            val = (float)Math.Pow((u + 0.055) / 1.055, 2.4);
-                                        }
-                                        // 同时应用白点增益
-                                        srgbToLinearTable[i] = val * sdrWhiteGain;
-                                    }
+                                            ds.Clear(Windows.UI.Colors.Transparent);
+                                            ds.DrawImage(rawBitmap, new Windows.Foundation.Rect(0, 0, renderTarget.Size.Width, renderTarget.Size.Height));
 
-                                    // 构建渲染链：
-                                    // Ink(Premul) -> UnPremul -> Table(Linearize) -> Premul -> Draw
-                                    // 必须先 UnPremultiply，否则对于半透明像素 (边缘抗锯齿)，
-                                    // R_premul = R * A。直接查表会导致非线性误差 (LUT(R*A) != LUT(R)*A)。
-                                    using (var unpremulEffect = new UnPremultiplyEffect { Source = inkRenderTarget })
-                                    using (var tableEffect = new TableTransferEffect
-                                    {
-                                        Source = unpremulEffect,
-                                        RedTable = srgbToLinearTable,
-                                        GreenTable = srgbToLinearTable,
-                                        BlueTable = srgbToLinearTable,
-                                        // AlphaTable 留空，默认为 Identity
-                                        ClampOutput = false
-                                    })
-                                    using (var premulEffect = new PremultiplyEffect { Source = tableEffect })
-                                    {
-                                        ds.DrawImage(premulEffect);
+                                            float sdrWhiteGain = 1.0f;
+                                            try
+                                            {
+                                                var mainDisplayInfo = DisplayInformation.GetForCurrentView();
+                                                var colorInfo = mainDisplayInfo.GetAdvancedColorInfo();
+                                                if (colorInfo != null)
+                                                {
+                                                    sdrWhiteGain = (float)colorInfo.SdrWhiteLevelInNits / 80.0f;
+                                                }
+                                            }
+                                            catch { }
+
+                                            float[] srgbToLinearTable = new float[256];
+                                            for (int i = 0; i < 256; i++)
+                                            {
+                                                float u = i / 255.0f;
+                                                float val;
+                                                if (u <= 0.04045f)
+                                                    val = u / 12.92f;
+                                                else
+                                                    val = (float)Math.Pow((u + 0.055) / 1.055, 2.4);
+                                                srgbToLinearTable[i] = val * sdrWhiteGain;
+                                            }
+
+                                            using (var unpremulEffect = new UnPremultiplyEffect { Source = inkCommands })
+                                            using (var tableEffect = new TableTransferEffect
+                                            {
+                                                Source = unpremulEffect,
+                                                RedTable = srgbToLinearTable,
+                                                GreenTable = srgbToLinearTable,
+                                                BlueTable = srgbToLinearTable,
+                                                ClampOutput = false
+                                            })
+                                            using (var premulEffect = new PremultiplyEffect { Source = tableEffect })
+                                            {
+                                                ds.DrawImage(premulEffect);
+                                            }
+                                        }
                                     }
                                 }
+                                else
+                                {
+                                    // SDR 管线：源图和笔迹都在 sRGB 空间，无需色彩空间转换
+                                    using (var ds = renderTarget.CreateDrawingSession())
+                                    {
+                                        ds.Clear(Windows.UI.Colors.Transparent);
+                                        ds.DrawImage(rawBitmap, new Windows.Foundation.Rect(0, 0, renderTarget.Size.Width, renderTarget.Size.Height));
+
+                                        if (validScale)
+                                            ds.Transform = Matrix3x2.CreateScale(scaleX, scaleY);
+                                        ds.DrawInk(strokes);
+                                    }
+                                }
+
+                                await renderTarget.SaveAsync(stream, saveFormat);
                             }
-
-                            await renderTarget.SaveAsync(stream, CanvasBitmapFileFormat.JpegXR);
                         }
                     }
                 }
@@ -363,7 +353,7 @@ namespace MicroWinUI
                     ds.DrawImage(rawBitmap, (float)-pixelRect.X, (float)-pixelRect.Y);
                 }
 
-                // 更新 rawBitmap 引用
+                rawBitmap?.Dispose();
                 rawBitmap = newBitmap;
 
                 // 3. 更新笔迹位置
@@ -391,7 +381,8 @@ namespace MicroWinUI
                 // 将新的 rawBitmap 转回 BitmapImage 以显示 (保留 HDR 能力)
                 using (var stream = new InMemoryRandomAccessStream())
                 {
-                    await rawBitmap.SaveAsync(stream, CanvasBitmapFileFormat.JpegXR);
+                    var intermediateFormat = isHdrImage ? CanvasBitmapFileFormat.JpegXR : CanvasBitmapFileFormat.Png;
+                    await rawBitmap.SaveAsync(stream, intermediateFormat);
                     stream.Seek(0);
 
                     var newImg = new BitmapImage();
