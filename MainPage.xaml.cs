@@ -39,6 +39,7 @@ namespace MicroWinUI
         private bool _isInertiaRendering;
         private const double Friction = 0.88;
         private const double VelocityThreshold = 0.1;
+        private Windows.Foundation.Point _lastPointerInView = new Windows.Foundation.Point(double.NaN, double.NaN);
 
         public MainPage(IslandWindow coreWindowHost)
         {
@@ -51,6 +52,10 @@ namespace MicroWinUI
 
             // 默认启用抓手模式
             Loaded += (s, e) => EnableHandMode();
+
+            // Ctrl+滚轮缩放：在内容层拦截 PointerWheelChanged，阻止 ScrollViewer 做内置缩放
+            ImageGrid.AddHandler(UIElement.PointerWheelChangedEvent,
+                new Windows.UI.Xaml.Input.PointerEventHandler(OnContentPointerWheelChanged), true);
 
             // 键盘缩放快捷键（XAML Islands 不转发 Ctrl+Key 到 XAML 层，需在消息泵层拦截）
             System.Windows.Forms.Application.AddMessageFilter(new ZoomMessageFilter(this));
@@ -486,6 +491,8 @@ namespace MicroWinUI
 
         private void MainScrollViewer_PointerMoved(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
         {
+            _lastPointerInView = e.GetCurrentPoint(MainScrollViewer).Position;
+
             if (_isHandMode && _lastDragPoint.HasValue)
             {
                 var currentPoint = e.GetCurrentPoint(MainScrollViewer).Position;
@@ -568,6 +575,24 @@ namespace MicroWinUI
                 StopInertia();
             }
         }
+        private void OnContentPointerWheelChanged(object sender, Windows.UI.Xaml.Input.PointerRoutedEventArgs e)
+        {
+            if (e.Pointer.PointerDeviceType != Windows.Devices.Input.PointerDeviceType.Mouse) return;
+            var props = e.GetCurrentPoint(MainScrollViewer).Properties;
+            if (!props.IsHorizontalMouseWheel && e.KeyModifiers.HasFlag(Windows.System.VirtualKeyModifiers.Control))
+            {
+                int delta = props.MouseWheelDelta;
+                // 更新鼠标位置用于锚点计算
+                _lastPointerInView = e.GetCurrentPoint(MainScrollViewer).Position;
+
+                const float zoomStep = 1.25f;
+                float factor = (float)Math.Pow(zoomStep, delta / 120.0);
+                ZoomByFactor(factor);
+
+                e.Handled = true;
+            }
+        }
+
         internal void ZoomByFactor(float factor)
         {
             float newZoom = MainScrollViewer.ZoomFactor * factor;
@@ -580,15 +605,30 @@ namespace MicroWinUI
             targetZoom = Math.Max(MainScrollViewer.MinZoomFactor, Math.Min(MainScrollViewer.MaxZoomFactor, targetZoom));
             float currentZoom = MainScrollViewer.ZoomFactor;
 
-            // 以视口中心为锚点缩放，计算缩放后保持中心不变的偏移量
-            double viewCenterX = MainScrollViewer.HorizontalOffset + MainScrollViewer.ViewportWidth / 2;
-            double viewCenterY = MainScrollViewer.VerticalOffset + MainScrollViewer.ViewportHeight / 2;
+            // 锚点：鼠标在视口中的位置（如无有效位置则退回视口中心）
+            double anchorX, anchorY;
+            if (!double.IsNaN(_lastPointerInView.X))
+            {
+                anchorX = _lastPointerInView.X;
+                anchorY = _lastPointerInView.Y;
+            }
+            else
+            {
+                anchorX = MainScrollViewer.ViewportWidth / 2;
+                anchorY = MainScrollViewer.ViewportHeight / 2;
+            }
 
-            double contentX = viewCenterX / currentZoom;
-            double contentY = viewCenterY / currentZoom;
+            // 当内容小于视口时，ScrollViewer 将内容居中，产生额外的内边距
+            double padX = Math.Max(0, (MainScrollViewer.ViewportWidth - MainScrollViewer.ExtentWidth) / 2);
+            double padY = Math.Max(0, (MainScrollViewer.ViewportHeight - MainScrollViewer.ExtentHeight) / 2);
 
-            double newOffsetX = contentX * targetZoom - MainScrollViewer.ViewportWidth / 2;
-            double newOffsetY = contentY * targetZoom - MainScrollViewer.ViewportHeight / 2;
+            // 锚点对应的内容坐标（减去居中内边距）
+            double contentX = (MainScrollViewer.HorizontalOffset + anchorX - padX) / currentZoom;
+            double contentY = (MainScrollViewer.VerticalOffset + anchorY - padY) / currentZoom;
+
+            // 缩放后保持锚点在视口中相同位置
+            double newOffsetX = contentX * targetZoom - anchorX;
+            double newOffsetY = contentY * targetZoom - anchorY;
 
             MainScrollViewer.ChangeView(newOffsetX, newOffsetY, targetZoom, false);
         }
