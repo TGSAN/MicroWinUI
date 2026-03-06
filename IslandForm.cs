@@ -1,4 +1,4 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using Mile.Xaml;
 using Mile.Xaml.Interop;
 using System;

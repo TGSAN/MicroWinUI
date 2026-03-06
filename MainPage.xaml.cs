@@ -16,7 +16,6 @@ using Windows.UI.Xaml.Media.Imaging;
 using System.Numerics;
 using Windows.UI.Xaml.Media;
 using Windows.Storage.Streams;
-
 namespace MicroWinUI
 {
     [ComImport]
@@ -52,6 +51,9 @@ namespace MicroWinUI
 
             // 默认启用抓手模式
             Loaded += (s, e) => EnableHandMode();
+
+            // 键盘缩放快捷键（XAML Islands 不转发 Ctrl+Key 到 XAML 层，需在消息泵层拦截）
+            System.Windows.Forms.Application.AddMessageFilter(new ZoomMessageFilter(this));
         }
 
         private async void OpenButton_Click(object sender, RoutedEventArgs e)
@@ -566,6 +568,65 @@ namespace MicroWinUI
                 StopInertia();
             }
         }
+        internal void ZoomByFactor(float factor)
+        {
+            float newZoom = MainScrollViewer.ZoomFactor * factor;
+            newZoom = Math.Max(MainScrollViewer.MinZoomFactor, Math.Min(MainScrollViewer.MaxZoomFactor, newZoom));
+            ZoomToFactor(newZoom);
+        }
+
+        internal void ZoomToFactor(float targetZoom)
+        {
+            targetZoom = Math.Max(MainScrollViewer.MinZoomFactor, Math.Min(MainScrollViewer.MaxZoomFactor, targetZoom));
+            float currentZoom = MainScrollViewer.ZoomFactor;
+
+            // 以视口中心为锚点缩放，计算缩放后保持中心不变的偏移量
+            double viewCenterX = MainScrollViewer.HorizontalOffset + MainScrollViewer.ViewportWidth / 2;
+            double viewCenterY = MainScrollViewer.VerticalOffset + MainScrollViewer.ViewportHeight / 2;
+
+            double contentX = viewCenterX / currentZoom;
+            double contentY = viewCenterY / currentZoom;
+
+            double newOffsetX = contentX * targetZoom - MainScrollViewer.ViewportWidth / 2;
+            double newOffsetY = contentY * targetZoom - MainScrollViewer.ViewportHeight / 2;
+
+            MainScrollViewer.ChangeView(newOffsetX, newOffsetY, targetZoom, false);
+        }
+
         public bool IsCheckedNegation(bool? value) => !(value == true);
+    }
+
+    internal class ZoomMessageFilter : System.Windows.Forms.IMessageFilter
+    {
+        private const int WM_KEYDOWN = 0x0100;
+        private const float ZoomStep = 1.25f;
+        private readonly MainPage _page;
+
+        public ZoomMessageFilter(MainPage page) { _page = page; }
+
+        public bool PreFilterMessage(ref System.Windows.Forms.Message m)
+        {
+            if (m.Msg != WM_KEYDOWN) return false;
+            if ((System.Windows.Forms.Control.ModifierKeys & System.Windows.Forms.Keys.Control) == 0) return false;
+
+            var key = (System.Windows.Forms.Keys)(int)m.WParam;
+            switch (key)
+            {
+                case System.Windows.Forms.Keys.Oemplus:
+                case System.Windows.Forms.Keys.Add:
+                    _page.ZoomByFactor(ZoomStep);
+                    return true;
+                case System.Windows.Forms.Keys.OemMinus:
+                case System.Windows.Forms.Keys.Subtract:
+                    _page.ZoomByFactor(1f / ZoomStep);
+                    return true;
+                case System.Windows.Forms.Keys.D0:
+                case System.Windows.Forms.Keys.NumPad0:
+                    _page.ZoomToFactor(1.0f);
+                    return true;
+                default:
+                    return false;
+            }
+        }
     }
 }
