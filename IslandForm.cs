@@ -267,6 +267,7 @@ namespace MicroWinUICore
 
         private void CloseAllXamlPopups()
         {
+            if (xamlHost.Child == null) return;
             xamlHost.Invoke(() =>
             {
                 var xamlRoot = xamlHost.Child.XamlRoot;
@@ -275,6 +276,12 @@ namespace MicroWinUICore
                     var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot);
                     foreach (var popup in popups)
                     {
+                        // 忽略非 LightDismiss 的弹出层（如 ContentDialog 本身、及其半透明黑色遮罩 SmokeLayer）
+                        // 只有像 ComboBox 的下拉菜单这种默认开启 LightDismiss 的 Popup 才需要我们在这里强制关闭。
+                        if (!popup.IsLightDismissEnabled)
+                        {
+                            continue;
+                        }
                         popup.IsOpen = false;
                     }
                 }
