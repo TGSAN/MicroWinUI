@@ -1,4 +1,4 @@
-﻿using System;
+﻿﻿﻿﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Runtime.InteropServices;
@@ -118,6 +118,11 @@ namespace MicroWinUICore
             DWMSBT_TABBEDWINDOW = 4
         }
 
+        /// <summary>
+        /// DWM 颜色值：表示不设置颜色（透明/系统默认）。
+        /// </summary>
+        public const uint DWMWA_COLOR_NONE = 0xFFFFFFFE;
+
         internal enum DWMWINDOWATTRIBUTE : uint
         {
             DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1 = 19,
@@ -130,5 +135,85 @@ namespace MicroWinUICore
             DWMWA_SYSTEMBACKDROP_TYPE = 38,
             DWMWA_MICA = 1029,
         }
+
+        // WM 消息常量
+        public const int WM_SIZE = 0x0005;
+        public const int WM_GETMINMAXINFO = 0x0024;
+        public const int WM_SETTINGCHANGE = 0x001A;
+        public const int WM_NCCALCSIZE = 0x0083;
+        public const int WM_NCHITTEST = 0x0084;
+        public const int WM_DPICHANGED = 0x02E0;
+
+        // NCHITTEST 返回值常量
+        public const int HTCLIENT = 1;
+        public const int HTCAPTION = 2;
+        public const int HTMINBUTTON = 8;
+        public const int HTMAXBUTTON = 9;
+        public const int HTLEFT = 10;
+        public const int HTRIGHT = 11;
+        public const int HTTOP = 12;
+        public const int HTTOPLEFT = 13;
+        public const int HTTOPRIGHT = 14;
+        public const int HTBOTTOM = 15;
+        public const int HTBOTTOMLEFT = 16;
+        public const int HTBOTTOMRIGHT = 17;
+        public const int HTCLOSE = 20;
+
+        // GetSystemMetrics 常量
+        public const int SM_CXFRAME = 32;
+        public const int SM_CYFRAME = 33;
+        public const int SM_CXSIZE = 30;
+        public const int SM_CXPADDEDBORDER = 92;
+
+        // P/Invoke 声明
+        [DllImport("user32.dll")]
+        public static extern IntPtr GetSystemMenu(IntPtr hWnd, bool bRevert);
+
+        [DllImport("user32.dll")]
+        public static extern int TrackPopupMenu(IntPtr hMenu, uint uFlags, int x, int y, int nReserved, IntPtr hWnd, IntPtr prcRect);
+
+        [DllImport("user32.dll")]
+        public static extern int GetSystemMetrics(int nIndex);
+
+        [DllImport("user32.dll")]
+        public static extern int GetDpiForWindow(IntPtr hwnd);
+        /// <summary>
+        /// 将消息传递给 DWM 进行默认处理（标题栏按钮 hover 等效果）。
+        /// </summary>
+        [DllImport("dwmapi.dll", SetLastError = false, ExactSpelling = true)]
+        public static extern int DwmDefWindowProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, out IntPtr plResult);
+
+        // 结构体定义
+        [StructLayout(LayoutKind.Sequential)]
+        public struct RECT
+        {
+            public int Left, Top, Right, Bottom;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct NCCALCSIZE_PARAMS
+        {
+            public RECT rgrc0;
+            public RECT rgrc1;
+            public RECT rgrc2;
+            public IntPtr lppos;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct POINT
+        {
+            public int X, Y;
+        }
+
+        [StructLayout(LayoutKind.Sequential)]
+        public struct MINMAXINFO
+        {
+            public POINT ptReserved;
+            public POINT ptMaxSize;
+            public POINT ptMaxPosition;
+            public POINT ptMinTrackSize;
+            public POINT ptMaxTrackSize;
+        }
+
     }
 }

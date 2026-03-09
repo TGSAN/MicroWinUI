@@ -28,6 +28,7 @@ namespace MicroWinUICore
         UISettings uiSettings = new UISettings();
 
         WindowsXamlHost xamlHost = new WindowsXamlHost();
+        private CustomTitleBar _titleBar;
 
         SystemBackdrop _backdrop = SystemBackdrop.None;
         public SystemBackdrop Backdrop
@@ -85,6 +86,12 @@ namespace MicroWinUICore
 
         public IslandWindow()
         {
+            _titleBar = new CustomTitleBar(this);
+            _titleBar.TitleBarHeight = 48;
+            _titleBar.ExtendsContentIntoTitleBar = true;
+            _titleBar.DragRegionInvalidated += OnDragRegionInvalidated;
+            _titleBar.ThemeChanged += OnThemeChanged;
+
             uiSettings.ColorValuesChanged += (s, e) =>
             {
                 Invoke(UpdateTheme);
@@ -124,7 +131,19 @@ namespace MicroWinUICore
 
         private void IslandWindow_Resize(object sender, EventArgs e)
         {
+            UpdateXamlHostLayout();
             UpdateCoreWindowPos();
+        }
+
+        private void OnDragRegionInvalidated(object sender, EventArgs e)
+        {
+            UpdateCoreWindowPos();
+        }
+
+        private void OnThemeChanged(object sender, EventArgs e)
+        {
+            UpdateTheme();
+            UpdateBackdrop();
         }
 
         private void UpdateCoreWindowPos()
@@ -167,9 +186,39 @@ namespace MicroWinUICore
             this.AutoScaleMode = AutoScaleMode.Dpi;
             this.BackColor = Color.Transparent;
 
-            // Add XAML Island
+            // Add XAML Island — 手动布局以适配标题栏高度
             this.Controls.Add(xamlHost);
-            xamlHost.Dock = DockStyle.Fill;
+            UpdateXamlHostLayout();
+            _titleBar.Initialize();
+        }
+
+        /// <summary>
+        /// 根据标题栏高度和调整大小边框重新计算 xamlHost 的位置和大小。
+        /// 非最大化时在左、右、下三边留出调整大小边框的空间，使 WinForms 能接收边缘的 WM_NCHITTEST。
+        /// </summary>
+        private void UpdateXamlHostLayout()
+        {
+            if (xamlHost == null) return;
+            int titleBarHeight = _titleBar?.ScaledTitleBarHeight ?? 0;
+
+            bool maximized = (WindowState == FormWindowState.Maximized);
+            if (maximized)
+            {
+                // 最大化时不需要调整大小边框，xamlHost 填满标题栏以下区域
+                xamlHost.Top = titleBarHeight;
+                xamlHost.Left = 0;
+                xamlHost.Width = ClientSize.Width;
+                xamlHost.Height = Math.Max(0, ClientSize.Height - titleBarHeight);
+            }
+            else
+            {
+                // 非最大化时在左、右、下留出边框空间以支持窗口拖拽调整大小
+                int resizeBorder = CustomTitleBar.ScaleDimension(4, _titleBar?.CurrentDpi ?? 96);
+                xamlHost.Top = titleBarHeight;
+                xamlHost.Left = resizeBorder;
+                xamlHost.Width = Math.Max(0, ClientSize.Width - resizeBorder * 2);
+                xamlHost.Height = Math.Max(0, ClientSize.Height - titleBarHeight - resizeBorder);
+            }
         }
 
         private void UpdateTheme()
@@ -296,6 +345,10 @@ namespace MicroWinUICore
 
         protected override void WndProc(ref Message m)
         {
+            // 先委托给 CustomTitleBar 处理标题栏相关消息
+            if (_titleBar != null && _titleBar.ProcessMessage(ref m))
+                return;
+
             const int WM_NCLBUTTONDOWN = 0x00A1; // 非客户区（标题栏等）鼠标按下
             const int WM_LBUTTONDOWN = 0x0201;   // 客户区鼠标按下
             const int WM_ACTIVATE = 0x0006;
@@ -324,9 +377,14 @@ namespace MicroWinUICore
             base.WndProc(ref m);
         }
 
+        protected override void OnPaint(PaintEventArgs e)
+        {
+            base.OnPaint(e);
+        }
+
         protected override void OnPaintBackground(PaintEventArgs e)
         {
-            // Transparent
+            // Transparent — DWM 扩展帧不需要背景绘制
         }
 
         private static bool IsWindows10OrGreater(int build = -1)

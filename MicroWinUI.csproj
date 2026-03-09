@@ -15,6 +15,9 @@
 		<MileXamlManagedNoNativeBackend>true</MileXamlManagedNoNativeBackend>
 		<DisableEmbeddedXbf>false</DisableEmbeddedXbf>
 		<GenerateLibraryLayout>true</GenerateLibraryLayout>
+		<!-- 排除 WindowsAppSDK 子模块，防止 XAML 编译器扫描到格式异常的 .xaml 文件 -->
+		<!-- 排除测试项目目录，防止主项目编译测试代码 -->
+		<DefaultItemExcludes>$(DefaultItemExcludes);WindowsAppSDK\**;MicroWinUI.Tests\**</DefaultItemExcludes>
 	</PropertyGroup>
 
 	<ItemGroup>
