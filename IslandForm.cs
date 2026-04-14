@@ -1,12 +1,11 @@
-﻿using Microsoft.Win32;
+using Microsoft.Win32;
 using Mile.Xaml;
 using Mile.Xaml.Interop;
 using System;
 using System.Drawing;
-using System.Runtime;
 using System.Runtime.InteropServices;
-using System.Windows.Forms;
-using System.Xml.Linq;
+using System.Windows.Forms.Integration;
+using System.Windows.Interop;
 using Windows.UI.Core;
 using Windows.UI.ViewManagement;
 using Windows.UI.Xaml;
@@ -15,7 +14,7 @@ using Windows.UI.Xaml.Media;
 
 namespace MicroWinUICore
 {
-    public partial class IslandWindow : Form
+    public partial class IslandWindow : System.Windows.Window
     {
         public enum SystemBackdrop
         {
@@ -27,7 +26,11 @@ namespace MicroWinUICore
 
         UISettings uiSettings = new UISettings();
 
-        WindowsXamlHost xamlHost = new WindowsXamlHost();
+        WindowsXamlHost xamlHost;
+        WindowsFormsHost formsHost;
+        IntPtr _hwnd;
+        UIElement _pendingContent;
+        bool _islandInitialized;
 
         SystemBackdrop _backdrop = SystemBackdrop.None;
         public SystemBackdrop Backdrop
@@ -52,7 +55,7 @@ namespace MicroWinUICore
             }
         }
 
-        public UIElement Content
+        public UIElement XamlIslandContent
         {
             get
             {
@@ -60,6 +63,11 @@ namespace MicroWinUICore
             }
             set
             {
+                if (!_islandInitialized)
+                {
+                    _pendingContent = value;
+                    return;
+                }
                 xamlHost.Child = value;
                 if (value != null)
                 {
@@ -87,24 +95,42 @@ namespace MicroWinUICore
         {
             uiSettings.ColorValuesChanged += (s, e) =>
             {
-                Invoke(UpdateTheme);
-                Invoke(UpdateBackdrop);
+                Dispatcher.Invoke(UpdateTheme);
+                Dispatcher.Invoke(UpdateBackdrop);
             };
-            this.Load += IslandForm_Load;
+            this.SourceInitialized += IslandWindow_SourceInitialized;
+            this.Loaded += IslandWindow_Loaded;
             this.Activated += IslandWindow_Activated;
 
-            this.Resize += IslandWindow_Resize;
-            this.Move += IslandWindow_Move;
-            xamlHost.HandleCreated += XamlHost_HandleCreated;
-            xamlHost.SizeChanged += XamlHost_SizeChanged;
+            this.SizeChanged += IslandWindow_SizeChanged;
+            this.LocationChanged += IslandWindow_LocationChanged;
+        }
+
+        private void IslandWindow_SourceInitialized(object sender, EventArgs e)
+        {
+            _hwnd = new WindowInteropHelper(this).Handle;
+
+            // Hook WndProc
+            var hwndSource = HwndSource.FromHwnd(_hwnd);
+            hwndSource.AddHook(WndProc);
+
+            // DWM setup (only needs HWND, no XAML Island yet)
+            ExtendFrameIntoClientArea(_hwnd);
+            UpdateTheme();
+        }
+
+        private void IslandWindow_Loaded(object sender, System.Windows.RoutedEventArgs e)
+        {
+            InitializeIsland();
         }
 
         private void IslandWindow_Activated(object sender, EventArgs e)
         {
-            ExtendFrameIntoClientArea(Handle);
+            if (_hwnd == IntPtr.Zero) return;
+            ExtendFrameIntoClientArea(_hwnd);
             UpdateTheme();
             UpdateBackdrop();
-            ExtendFrameIntoClientArea(Handle); // DWM 重启需要两次设置 ExtendFrameIntoClientArea 才能生效
+            ExtendFrameIntoClientArea(_hwnd); // DWM 重启需要两次设置 ExtendFrameIntoClientArea 才能生效
         }
 
         private void XamlHost_SizeChanged(object sender, EventArgs e)
@@ -117,12 +143,12 @@ namespace MicroWinUICore
             UpdateCoreWindowPos();
         }
 
-        private void IslandWindow_Move(object sender, EventArgs e)
+        private void IslandWindow_LocationChanged(object sender, EventArgs e)
         {
             UpdateCoreWindowPos();
         }
 
-        private void IslandWindow_Resize(object sender, EventArgs e)
+        private void IslandWindow_SizeChanged(object sender, System.Windows.SizeChangedEventArgs e)
         {
             UpdateCoreWindowPos();
         }
@@ -149,31 +175,42 @@ namespace MicroWinUICore
             return (((5 * clr.G) + (2 * clr.R) + clr.B) > (8 * 128));
         }
 
-        private void IslandForm_Load(object sender, EventArgs e)
-        {
-            InitializeIsland();
-        }
-
         public void InitializeIsland()
         {
-            ExtendFrameIntoClientArea(Handle);
-            UpdateTheme();
-            UpdateBackdrop();
+            // Use a WinForms Panel as intermediary to prevent WPF layout
+            // from passing infinite size to WindowsXamlHost.Measure
+            var panel = new System.Windows.Forms.Panel();
+            panel.Dock = System.Windows.Forms.DockStyle.Fill;
 
-            SetStyle(ControlStyles.UserPaint, true);
-            SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
-            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
-            this.BackColor = Color.Transparent;
+            formsHost = new WindowsFormsHost();
+            formsHost.Child = panel;
+            this.Content = formsHost;
 
-            // Add XAML Island
-            this.Controls.Add(xamlHost);
-            xamlHost.Dock = DockStyle.Fill;
+            // Defer XAML Island creation until layout is complete
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                xamlHost = new WindowsXamlHost();
+                xamlHost.HandleCreated += XamlHost_HandleCreated;
+                xamlHost.SizeChanged += XamlHost_SizeChanged;
+                xamlHost.Dock = System.Windows.Forms.DockStyle.Fill;
+                panel.Controls.Add(xamlHost);
+
+                ExtendFrameIntoClientArea(_hwnd);
+                UpdateBackdrop();
+
+                _islandInitialized = true;
+
+                if (_pendingContent != null)
+                {
+                    XamlIslandContent = _pendingContent;
+                    _pendingContent = null;
+                }
+            }), System.Windows.Threading.DispatcherPriority.Loaded);
         }
 
         private void UpdateTheme()
         {
+            if (_hwnd == IntPtr.Zero) return;
             bool isDarkMode = IsAppDarkMode();
             _actualTheme = isDarkMode ? ElementTheme.Dark : ElementTheme.Light;
             var attribute = Win32API.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1;
@@ -181,13 +218,14 @@ namespace MicroWinUICore
             {
                 attribute = Win32API.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE;
             }
-            SetWindowAttribute(Handle, attribute, isDarkMode ? 1 : 0, sizeof(int));
+            SetWindowAttribute(_hwnd, attribute, isDarkMode ? 1 : 0, sizeof(int));
         }
 
         private void UpdateBackdrop()
         {
+            if (_hwnd == IntPtr.Zero || xamlHost == null) return;
             // DWMWA_COLOR_NONE 忽略标题上色
-            SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, 0xFFFFFFFE, sizeof(int));
+            SetWindowAttribute(_hwnd, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, 0xFFFFFFFE, sizeof(int));
             bool isDarkMode = IsAppDarkMode();
             bool colorPrevalence = IsColorPrevalence();
             if (colorPrevalence && (Backdrop == SystemBackdrop.None || !IsWindows10OrGreater(22000)))
@@ -202,29 +240,29 @@ namespace MicroWinUICore
             if (Backdrop == SystemBackdrop.Mica)
             {
                 // Enable Mica
-                SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_MICA, 1, sizeof(int));
+                SetWindowAttribute(_hwnd, Win32API.DWMWINDOWATTRIBUTE.DWMWA_MICA, 1, sizeof(int));
                 // Set the backdrop type to Main Window
                 var type = Win32API.DWM_SYSTEMBACKDROP_TYPE.DWMSBT_MAINWINDOW;
-                SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, (uint)type, sizeof(uint));
+                SetWindowAttribute(_hwnd, Win32API.DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, (uint)type, sizeof(uint));
             }
             else
             {
                 // Disable Mica
-                SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_MICA, 0, sizeof(int));
+                SetWindowAttribute(_hwnd, Win32API.DWMWINDOWATTRIBUTE.DWMWA_MICA, 0, sizeof(int));
                 if (Backdrop == SystemBackdrop.Acrylic)
                 {
                     var type = Win32API.DWM_SYSTEMBACKDROP_TYPE.DWMSBT_TRANSIENTWINDOW;
-                    SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, (uint)type, sizeof(uint));
+                    SetWindowAttribute(_hwnd, Win32API.DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, (uint)type, sizeof(uint));
                 }
                 else if (Backdrop == SystemBackdrop.Tabbed)
                 {
                     var type = Win32API.DWM_SYSTEMBACKDROP_TYPE.DWMSBT_TABBEDWINDOW;
-                    SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, (uint)type, sizeof(uint));
+                    SetWindowAttribute(_hwnd, Win32API.DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, (uint)type, sizeof(uint));
                 }
                 else
                 {
                     var type = Win32API.DWM_SYSTEMBACKDROP_TYPE.DWMSBT_NONE;
-                    SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, (uint)type, sizeof(uint));
+                    SetWindowAttribute(_hwnd, Win32API.DWMWINDOWATTRIBUTE.DWMWA_SYSTEMBACKDROP_TYPE, (uint)type, sizeof(uint));
                 }
             }
         }
@@ -288,25 +326,24 @@ namespace MicroWinUICore
             });
         }
 
-        private bool IsPointInXamlIsland(Point screenPoint)
+        private bool IsPointInXamlIsland(System.Drawing.Point screenPoint)
         {
             var clientPoint = xamlHost.PointToClient(screenPoint);
             return xamlHost.ClientRectangle.Contains(clientPoint);
         }
 
-        protected override void WndProc(ref Message m)
+        private IntPtr WndProc(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
         {
             const int WM_NCLBUTTONDOWN = 0x00A1; // 非客户区（标题栏等）鼠标按下
             const int WM_LBUTTONDOWN = 0x0201;   // 客户区鼠标按下
             const int WM_ACTIVATE = 0x0006;
-            const int WM_ACTIVATEAPP = 0x001C;
 
-            switch (m.Msg)
+            switch (msg)
             {
                 case WM_NCLBUTTONDOWN:
                 case WM_LBUTTONDOWN:
                     // 检查点击是否在 XAML Island 控件外部
-                    if (!IsPointInXamlIsland(Cursor.Position))
+                    if (!IsPointInXamlIsland(System.Windows.Forms.Cursor.Position))
                     {
                         CloseAllXamlPopups();
                     }
@@ -314,19 +351,14 @@ namespace MicroWinUICore
 
                 case WM_ACTIVATE:
                     // 窗口激活状态改变时也可能需要关闭
-                    if ((int)m.WParam == 0) // WA_INACTIVE
+                    if ((int)wParam == 0) // WA_INACTIVE
                     {
                         CloseAllXamlPopups();
                     }
                     break;
             }
 
-            base.WndProc(ref m);
-        }
-
-        protected override void OnPaintBackground(PaintEventArgs e)
-        {
-            // Transparent
+            return IntPtr.Zero;
         }
 
         private static bool IsWindows10OrGreater(int build = -1)

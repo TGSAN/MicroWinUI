@@ -1,4 +1,4 @@
-﻿using MicroWinUI;
+using MicroWinUI;
 using System;
 using System.Windows.Forms;
 
@@ -15,12 +15,12 @@ namespace MicroWinUICore
             App app = new();
 
             var window = new IslandWindow();
-            window.Content = new MainPage(window);
-            window.ClientSize = new System.Drawing.Size(1280, 720);
-            window.Text = "App";
-            window.ShowIcon = false;
+            window.XamlIslandContent = new MainPage(window);
+            window.Width = 1280;
+            window.Height = 720;
+            window.Title = "App";
 
-            Application.Run(window);
+            window.ShowDialog();
 
             app.Close();
         }

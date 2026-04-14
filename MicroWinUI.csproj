@@ -8,6 +8,7 @@
 		<LangVersion>latest</LangVersion>
 		<ApplicationManifest>App.manifest</ApplicationManifest>
 		<UseWindowsForms>true</UseWindowsForms>
+		<UseWPF>true</UseWPF>
 		<!-- Add workaround for WinRT support in the old .NET SDK -->
 		<SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
 		<PlatformTarget>AnyCPU</PlatformTarget>
