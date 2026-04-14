@@ -12,6 +12,7 @@
         IsBackEnabled="True"
         IsSettingsVisible="True"
         PaneDisplayMode="LeftCompact"
+        IsPaneOpen="False"
         SelectedItem="{Binding ElementName=NavView, Path=MenuItems[0], Mode=OneTime}">
 
         <NavigationView.Resources>

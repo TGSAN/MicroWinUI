@@ -1,6 +1,5 @@
 using MicroWinUI;
 using System;
-using System.Windows.Forms;
 
 namespace MicroWinUICore
 {
@@ -9,9 +8,6 @@ namespace MicroWinUICore
         [STAThread]
         static void Main()
         {
-            Application.EnableVisualStyles();
-            Application.SetCompatibleTextRenderingDefault(false);
-
             App app = new();
 
             var window = new IslandWindow();
