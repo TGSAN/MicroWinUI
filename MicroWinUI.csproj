@@ -18,14 +18,12 @@
 	</PropertyGroup>
 
 	<ItemGroup>
-		<PackageReference Include="Mile.Xaml" Version="2.5.1250" />
+		<PackageReference Include="Mile.Xaml" Version="2.5.1616" />
 	</ItemGroup>
 
 	<Target Name="EmbedMileXamlStyles" BeforeTargets="ResolveReferences">
 		<ItemGroup>
-			<_MileXamlStyleItem
-			  Include="@(ReferenceCopyLocalPaths)"
-			  Condition="'%(Filename)%(Extension)' == 'Mile.Xaml.Styles.SunValley.xbf'" />
+			<_MileXamlStyleItem Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)%(Extension)' == 'Mile.Xaml.Styles.SunValley.xbf'" />
 
 			<!-- 从复制列表中移除 xbf -->
 			<ReferenceCopyLocalPaths Remove="@(_MileXamlStyleItem)" />
