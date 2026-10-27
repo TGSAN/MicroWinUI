@@ -5,7 +5,7 @@
   <Application.Resources>
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///Mile.Xaml.Styles.SunValley.xbf" />
+        <!-- 样式由 App.xaml.cs 从嵌入的 Assets/Styles/SunValley.xaml 加载。 -->
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

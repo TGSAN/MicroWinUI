@@ -10,6 +10,7 @@
         Header="Home"
         IsBackButtonVisible="Visible"
         IsBackEnabled="True"
+        IsPaneOpen="False"
         IsSettingsVisible="True"
         PaneDisplayMode="LeftCompact"
         SelectedItem="{Binding ElementName=NavView, Path=MenuItems[0], Mode=OneTime}">
@@ -424,10 +425,10 @@
                 </PivotItem>
                 <PivotItem Header="Backdrop">
                     <StackPanel>
-                        <RadioButton Content="None" Checked="NoneBackdropRadioButton_Checked" />
-                        <RadioButton Content="Acrylic" Checked="AcrylicBackdropRadioButton_Checked" />
-                        <RadioButton Content="Mica (Windows 11)" Checked="MicaBackdropRadioButton_Checked" />
-                        <RadioButton Content="Mica Alt (Windows 11)" IsChecked="True" Checked="MicaAltBackdropRadioButton_Checked" />
+                        <RadioButton x:Name="NoneBackdropRadioButton" Content="None" Checked="NoneBackdropRadioButton_Checked" />
+                        <RadioButton x:Name="AcrylicBackdropRadioButton" Content="Acrylic" Checked="AcrylicBackdropRadioButton_Checked" />
+                        <RadioButton x:Name="MicaBackdropRadioButton" Content="Mica (Windows 11)" Checked="MicaBackdropRadioButton_Checked" />
+                        <RadioButton x:Name="MicaAltBackdropRadioButton" Content="Mica Alt (Windows 11)" IsChecked="True" Checked="MicaAltBackdropRadioButton_Checked" />
                     </StackPanel>
                 </PivotItem>
             </Pivot>

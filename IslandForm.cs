@@ -27,7 +27,7 @@ namespace MicroWinUICore
 
         UISettings uiSettings = new UISettings();
 
-        WindowsXamlHost xamlHost = new WindowsXamlHost();
+        WindowsXamlHost xamlHost = new TransparentWindowsXamlHost();
 
         SystemBackdrop _backdrop = SystemBackdrop.None;
         public SystemBackdrop Backdrop
@@ -66,6 +66,10 @@ namespace MicroWinUICore
                     CoreWindow coreWindow = CoreWindow.GetForCurrentThread();
                     _coreWindowWHND = coreWindow.GetInterop().GetWindowHandle();
                     UpdateCoreWindowPos();
+                    if (IsHandleCreated)
+                    {
+                        UpdateBackdrop();
+                    }
                 }
                 else
                 {
@@ -83,8 +87,28 @@ namespace MicroWinUICore
             }
         }
 
+        private Size _logicalClientSize = Size.Empty;
+        private uint _appliedDpi = 96;
+
         public IslandWindow()
         {
+            SetStyle(ControlStyles.UserPaint, true);
+            SetStyle(ControlStyles.AllPaintingInWmPaint, true);
+            SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
+            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
+            // 窗口尺寸由调用方以逻辑像素（96 DPI 基准）指定，经 ScaleToDeviceSize 换算，
+            // 因此关闭 WinForms 自身的自动缩放，避免叠加缩放。
+            this.AutoScaleMode = AutoScaleMode.None;
+            this.BackColor = Color.Black;
+
+            xamlHost.BackColor = Color.Black;
+            xamlHost.Dock = DockStyle.Fill;
+            xamlHost.Paint += (s, e) =>
+            {
+                e.Graphics.Clear(Color.Transparent);
+            };
+            this.Controls.Add(xamlHost);
+
             uiSettings.ColorValuesChanged += (s, e) =>
             {
                 Invoke(UpdateTheme);
@@ -97,6 +121,60 @@ namespace MicroWinUICore
             this.Move += IslandWindow_Move;
             xamlHost.HandleCreated += XamlHost_HandleCreated;
             xamlHost.SizeChanged += XamlHost_SizeChanged;
+        }
+
+        protected override void OnHandleCreated(EventArgs e)
+        {
+            base.OnHandleCreated(e);
+            uint windowDpi = Win32API.GetDpiForWindow(Handle);
+            if (!_logicalClientSize.IsEmpty && windowDpi != 0 && windowDpi != _appliedDpi)
+            {
+                _appliedDpi = windowDpi;
+                Size scaled = ScaleToDeviceSize(_logicalClientSize, windowDpi);
+                base.SetClientSizeCore(scaled.Width, scaled.Height);
+            }
+            ExtendFrameIntoClientArea(Handle);
+            UpdateTheme();
+            UpdateBackdrop();
+        }
+
+        protected override void SetClientSizeCore(int x, int y)
+        {
+            _logicalClientSize = new Size(x, y);
+            uint dpi = IsHandleCreated
+                ? Win32API.GetDpiForWindow(Handle)
+                : Win32API.GetDpiForSystem();
+            if (dpi == 0)
+            {
+                dpi = 96;
+            }
+            _appliedDpi = dpi;
+            Size scaled = ScaleToDeviceSize(_logicalClientSize, dpi);
+            base.SetClientSizeCore(scaled.Width, scaled.Height);
+        }
+
+        /// <summary>
+        /// 把以 96 DPI 为基准的逻辑尺寸换算成当前显示器的物理像素尺寸。
+        /// </summary>
+        public Size ScaleToDeviceSize(Size logicalSize)
+        {
+            uint dpi = IsHandleCreated
+                ? Win32API.GetDpiForWindow(Handle)
+                : Win32API.GetDpiForSystem();
+            return ScaleToDeviceSize(logicalSize, dpi);
+        }
+
+        private static Size ScaleToDeviceSize(Size logicalSize, uint dpi)
+        {
+            if (dpi == 0)
+            {
+                dpi = 96;
+            }
+
+            float scale = dpi / 96f;
+            return new Size(
+                (int)Math.Round(logicalSize.Width * scale),
+                (int)Math.Round(logicalSize.Height * scale));
         }
 
         private void IslandWindow_Activated(object sender, EventArgs e)
@@ -159,23 +237,16 @@ namespace MicroWinUICore
             ExtendFrameIntoClientArea(Handle);
             UpdateTheme();
             UpdateBackdrop();
-
-            SetStyle(ControlStyles.UserPaint, true);
-            SetStyle(ControlStyles.OptimizedDoubleBuffer, true);
-            SetStyle(ControlStyles.SupportsTransparentBackColor, true);
-            this.AutoScaleDimensions = new SizeF(96F, 96F);
-            this.AutoScaleMode = AutoScaleMode.Dpi;
-            this.BackColor = Color.Transparent;
-
-            // Add XAML Island
-            this.Controls.Add(xamlHost);
-            xamlHost.Dock = DockStyle.Fill;
         }
 
         private void UpdateTheme()
         {
             bool isDarkMode = IsAppDarkMode();
             _actualTheme = isDarkMode ? ElementTheme.Dark : ElementTheme.Light;
+            if (!IsHandleCreated)
+            {
+                return;
+            }
             var attribute = Win32API.DWMWINDOWATTRIBUTE.DWMWA_USE_IMMERSIVE_DARK_MODE_BEFORE_20H1;
             if (IsWindows10OrGreater(18985))
             {
@@ -186,8 +257,6 @@ namespace MicroWinUICore
 
         private void UpdateBackdrop()
         {
-            // DWMWA_COLOR_NONE 忽略标题上色
-            SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, 0xFFFFFFFE, sizeof(int));
             bool isDarkMode = IsAppDarkMode();
             bool colorPrevalence = IsColorPrevalence();
             if (colorPrevalence && (Backdrop == SystemBackdrop.None || !IsWindows10OrGreater(22000)))
@@ -199,6 +268,12 @@ namespace MicroWinUICore
             {
                 (this.xamlHost.Child as Page)?.Background = new SolidColorBrush(Windows.UI.Colors.Transparent);
             }
+            if (!IsHandleCreated)
+            {
+                return;
+            }
+            // DWMWA_COLOR_NONE 忽略标题上色
+            SetWindowAttribute(Handle, Win32API.DWMWINDOWATTRIBUTE.DWMWA_CAPTION_COLOR, 0xFFFFFFFE, sizeof(int));
             if (Backdrop == SystemBackdrop.Mica)
             {
                 // Enable Mica
@@ -296,13 +371,36 @@ namespace MicroWinUICore
 
         protected override void WndProc(ref Message m)
         {
+            const int WM_ERASEBKGND = 0x0014;
             const int WM_NCLBUTTONDOWN = 0x00A1; // 非客户区（标题栏等）鼠标按下
             const int WM_LBUTTONDOWN = 0x0201;   // 客户区鼠标按下
             const int WM_ACTIVATE = 0x0006;
-            const int WM_ACTIVATEAPP = 0x001C;
+            const int WM_DPICHANGED = 0x02E0;
 
             switch (m.Msg)
             {
+                case WM_ERASEBKGND:
+                    if (Win32API.GetClientRect(m.HWnd, out Win32API.RECT clientRect))
+                    {
+                        Win32API.FillRect(m.WParam, in clientRect, Win32API.GetStockObject(Win32API.BLACK_BRUSH));
+                    }
+                    m.Result = new IntPtr(1);
+                    return;
+
+                case WM_DPICHANGED:
+                    var suggestedRect = Marshal.PtrToStructure<Win32API.RECT>(m.LParam);
+                    Win32API.SetWindowPos(
+                        Handle,
+                        Win32API.HWND_TOP,
+                        suggestedRect.Left,
+                        suggestedRect.Top,
+                        suggestedRect.Right - suggestedRect.Left,
+                        suggestedRect.Bottom - suggestedRect.Top,
+                        Win32API.SWP_NOZORDER | Win32API.SWP_NOACTIVATE);
+                    UpdateCoreWindowPos();
+                    m.Result = IntPtr.Zero;
+                    return;
+
                 case WM_NCLBUTTONDOWN:
                 case WM_LBUTTONDOWN:
                     // 检查点击是否在 XAML Island 控件外部
@@ -326,7 +424,37 @@ namespace MicroWinUICore
 
         protected override void OnPaintBackground(PaintEventArgs e)
         {
-            // Transparent
+            e.Graphics.Clear(Color.Transparent);
+        }
+
+        private sealed class TransparentWindowsXamlHost : WindowsXamlHost
+        {
+            protected override void OnPaintBackground(PaintEventArgs pevent)
+            {
+                pevent.Graphics.Clear(Color.Transparent);
+            }
+
+            protected override void OnPaint(PaintEventArgs e)
+            {
+                e.Graphics.Clear(Color.Transparent);
+                base.OnPaint(e);
+            }
+
+            protected override void WndProc(ref Message m)
+            {
+                const int WM_ERASEBKGND = 0x0014;
+                if (m.Msg == WM_ERASEBKGND)
+                {
+                    if (Win32API.GetClientRect(m.HWnd, out Win32API.RECT clientRect))
+                    {
+                        Win32API.FillRect(m.WParam, in clientRect, Win32API.GetStockObject(Win32API.BLACK_BRUSH));
+                    }
+                    m.Result = new IntPtr(1);
+                    return;
+                }
+
+                base.WndProc(ref m);
+            }
         }
 
         private static bool IsWindows10OrGreater(int build = -1)

@@ -15,8 +15,8 @@ namespace MicroWinUICore
             App app = new();
 
             var window = new IslandWindow();
-            window.Content = new MainPage(window);
             window.ClientSize = new System.Drawing.Size(1280, 720);
+            window.Content = new MainPage(window);
             window.Text = "App";
             window.ShowIcon = false;
 

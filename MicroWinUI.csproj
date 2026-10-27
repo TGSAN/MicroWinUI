@@ -8,48 +8,65 @@
 		<LangVersion>latest</LangVersion>
 		<ApplicationManifest>App.manifest</ApplicationManifest>
 		<UseWindowsForms>true</UseWindowsForms>
+		<!-- 排除目录内用于参考的第三方源码树，避免被默认通配符（*.cs / *.xaml）编入项目 -->
+		<DefaultItemExcludes>$(DefaultItemExcludes);microsoft-ui-xaml\**;WindowsAppSDK\**</DefaultItemExcludes>
+		<DefaultExcludesInProjectFolder>$(DefaultExcludesInProjectFolder);microsoft-ui-xaml\**;WindowsAppSDK\**</DefaultExcludesInProjectFolder>
 		<!-- Add workaround for WinRT support in the old .NET SDK -->
 		<SupportedOSPlatformVersion>$(TargetPlatformMinVersion)</SupportedOSPlatformVersion>
 		<PlatformTarget>AnyCPU</PlatformTarget>
-		<MileXamlNoSunValleyXamlStyle>false</MileXamlNoSunValleyXamlStyle>
+		<!-- 不再使用 XAML 编译器 / XBF / PRI：界面与样式改为运行时从嵌入资源解析 -->
+		<MileXamlNoSunValleyXamlStyle>true</MileXamlNoSunValleyXamlStyle>
 		<MileXamlManagedNoNativeBackend>true</MileXamlManagedNoNativeBackend>
-		<DisableEmbeddedXbf>false</DisableEmbeddedXbf>
-		<GenerateLibraryLayout>true</GenerateLibraryLayout>
+		<DisableEmbeddedXbf>true</DisableEmbeddedXbf>
+		<GenerateLibraryLayout>false</GenerateLibraryLayout>
+		<AppxGeneratePriEnabled>false</AppxGeneratePriEnabled>
+		<EnableDefaultPageItems>false</EnableDefaultPageItems>
+		<EnableDefaultApplicationDefinition>false</EnableDefaultApplicationDefinition>
 	</PropertyGroup>
 
 	<ItemGroup>
+		<PackageReference Include="Costura.Fody" Version="4.1.0" />
 		<PackageReference Include="Mile.Xaml" Version="2.5.1616" />
 	</ItemGroup>
 
-	<Target Name="EmbedMileXamlStyles" BeforeTargets="ResolveReferences">
+	<ItemGroup>
+		<!-- XAML 源文件不直接参与编译，由下方 CompressXamlResources 压缩后再嵌入 -->
+		<None Remove="*.xaml" />
+		<None Include="App.xaml" />
+		<None Include="MainPage.xaml" />
+		<None Include="Assets\Styles\SunValley.xaml" />
+	</ItemGroup>
+
+	<!--
+	  把 XAML 压缩成 gzip 后作为嵌入资源编入 exe。
+	  XAML 文本压缩率很高（样式字典约 6%），可显著减小产物体积。
+	  运行时由 XamlPageLoader 识别 gzip 头自动解压，调用方无感知。
+	-->
+	<PropertyGroup>
+		<!-- IntermediateOutputPath 在部分旧版 MSBuild 的 PrepareForBuild 阶段可能尚未初始化，
+		     这里显式使用 obj\配置\目标框架，避免临时文件回落到项目根目录。 -->
+		<_CompressedXamlDir>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\CompressedXaml\</_CompressedXamlDir>
+		<_CompressXamlScript>$(MSBuildThisFileDirectory)build\Compress-Xaml.ps1</_CompressXamlScript>
+	</PropertyGroup>
+
+	<Target Name="CompressXamlResources" BeforeTargets="PrepareForBuild">
 		<ItemGroup>
-			<_MileXamlStyleItem Include="@(ReferenceCopyLocalPaths)" Condition="'%(Filename)%(Extension)' == 'Mile.Xaml.Styles.SunValley.xbf'" />
-
-			<!-- 从复制列表中移除 xbf -->
-			<ReferenceCopyLocalPaths Remove="@(_MileXamlStyleItem)" />
-
-			<!-- xbf 添加到嵌入列表 -->
-			<_EmbedFile Include="@(_MileXamlStyleItem)">
-				<TargetPath>Mile.Xaml.Styles.SunValley.xbf</TargetPath>
-				<!-- 手动指定 OutputGroup 元数据来 Hack 构建脚本防止报错 -->
-				<OutputGroup>EmbedOutputGroupForPackaging</OutputGroup>
-				<ProjectName>$(ProjectName)</ProjectName>
-			</_EmbedFile>
+			<!-- 页面：项目根目录下的 *.xaml，排除 App.xaml（它是应用定义，不参与运行时加载） -->
+			<_XamlPageSource Include="*.xaml" Exclude="App.xaml" />
+			<_XamlStyleSource Include="Assets\*.xaml" />
+			<_XamlStyleSource Include="Assets\**\*.xaml" />
+			<_XamlSource Include="@(_XamlPageSource);@(_XamlStyleSource)" />
 		</ItemGroup>
-	</Target>
 
-	<Target Name="RenameOutputPri" AfterTargets="Build">
-		<PropertyGroup>
-			<_OldFile>$(TargetDir)$(TargetName).pri</_OldFile>
-			<_NewFile>$(TargetDir)resources.pri</_NewFile>
-		</PropertyGroup>
+		<Exec
+			Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_CompressXamlScript)&quot; -Source &quot;%(_XamlSource.FullPath)&quot; -Destination &quot;$(_CompressedXamlDir)%(_XamlSource.Filename)%(_XamlSource.Extension).gz&quot;"
+			ContinueOnError="false" />
 
-		<Message Importance="high" Text="正在重命名输出文件: $(TargetName).pri -> resources.pri" />
-
-		<Move
-		  SourceFiles="$(_OldFile)"
-		  DestinationFiles="$(_NewFile)"
-		  OverwriteReadOnlyFiles="true" />
+		<ItemGroup>
+			<EmbeddedResource Include="$(_CompressedXamlDir)%(_XamlSource.Filename)%(_XamlSource.Extension).gz">
+				<LogicalName>MicroWinUI.Assets.%(_XamlSource.Filename)%(_XamlSource.Extension)</LogicalName>
+			</EmbeddedResource>
+		</ItemGroup>
 	</Target>
 
 </Project>
