@@ -63,8 +63,16 @@ namespace MicroWinUICore
                 xamlHost.Child = value;
                 if (value != null)
                 {
-                    CoreWindow coreWindow = CoreWindow.GetForCurrentThread();
-                    _coreWindowWHND = coreWindow.GetInterop().GetWindowHandle();
+                    try
+                    {
+                        CoreWindow coreWindow = CoreWindow.GetForCurrentThread();
+                        _coreWindowWHND = coreWindow?.GetInterop().GetWindowHandle() ?? IntPtr.Zero;
+                    }
+                    catch (Exception)
+                    {
+                        _coreWindowWHND = IntPtr.Zero;
+                    }
+
                     UpdateCoreWindowPos();
                     if (IsHandleCreated)
                     {
@@ -109,11 +117,7 @@ namespace MicroWinUICore
             };
             this.Controls.Add(xamlHost);
 
-            uiSettings.ColorValuesChanged += (s, e) =>
-            {
-                Invoke(UpdateTheme);
-                Invoke(UpdateBackdrop);
-            };
+            uiSettings.ColorValuesChanged += UiSettings_ColorValuesChanged;
             this.Load += IslandForm_Load;
             this.Activated += IslandWindow_Activated;
 
@@ -183,6 +187,30 @@ namespace MicroWinUICore
             UpdateTheme();
             UpdateBackdrop();
             ExtendFrameIntoClientArea(Handle); // DWM 重启需要两次设置 ExtendFrameIntoClientArea 才能生效
+        }
+
+        private void UiSettings_ColorValuesChanged(UISettings sender, object args)
+        {
+            if (IsDisposed || Disposing || !IsHandleCreated)
+            {
+                return;
+            }
+
+            try
+            {
+                BeginInvoke((Action)(() =>
+                {
+                    if (!IsDisposed && !Disposing && IsHandleCreated)
+                    {
+                        UpdateTheme();
+                        UpdateBackdrop();
+                    }
+                }));
+            }
+            catch (InvalidOperationException)
+            {
+                // The callback can race with handle destruction during shutdown.
+            }
         }
 
         private void XamlHost_SizeChanged(object sender, EventArgs e)
@@ -306,18 +334,34 @@ namespace MicroWinUICore
 
         private static int ExtendFrameIntoClientArea(IntPtr hWnd)
         {
+            if (hWnd == IntPtr.Zero)
+            {
+                return 0;
+            }
+
             var margins = new Win32API.MARGINS(-1);
-            var result = Win32API.DwmExtendFrameIntoClientArea(hWnd, margins);
-            return result;
+            return Win32API.DwmExtendFrameIntoClientArea(hWnd, margins);
         }
 
         private static int SetWindowAttribute<T>(IntPtr hWnd, Win32API.DWMWINDOWATTRIBUTE attribute, T value, int sizeOf)
         {
-            var pinnedValue = GCHandle.Alloc(value, GCHandleType.Pinned);
-            var valueAddr = pinnedValue.AddrOfPinnedObject();
-            var result = Win32API.DwmSetWindowAttribute(hWnd, (uint)attribute, valueAddr, sizeOf);
-            pinnedValue.Free();
-            return result;
+            GCHandle pinnedValue = default(GCHandle);
+            try
+            {
+                pinnedValue = GCHandle.Alloc(value, GCHandleType.Pinned);
+                return Win32API.DwmSetWindowAttribute(
+                    hWnd,
+                    (uint)attribute,
+                    pinnedValue.AddrOfPinnedObject(),
+                    sizeOf);
+            }
+            finally
+            {
+                if (pinnedValue.IsAllocated)
+                {
+                    pinnedValue.Free();
+                }
+            }
         }
 
         public bool IsAppDarkMode()
@@ -342,25 +386,51 @@ namespace MicroWinUICore
 
         private void CloseAllXamlPopups()
         {
-            if (xamlHost.Child == null) return;
-            xamlHost.Invoke(() =>
+            if (IsDisposed || Disposing || xamlHost == null || xamlHost.IsDisposed
+                || !xamlHost.IsHandleCreated || xamlHost.Child == null)
             {
-                var xamlRoot = xamlHost.Child.XamlRoot;
-                if (xamlRoot != null)
+                return;
+            }
+
+            Action closePopups = () =>
+            {
+                if (IsDisposed || Disposing || xamlHost.IsDisposed || xamlHost.Child == null)
                 {
-                    var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot);
-                    foreach (var popup in popups)
+                    return;
+                }
+
+                var xamlRoot = xamlHost.Child.XamlRoot;
+                if (xamlRoot == null)
+                {
+                    return;
+                }
+
+                var popups = VisualTreeHelper.GetOpenPopupsForXamlRoot(xamlRoot);
+                foreach (var popup in popups)
+                {
+                    // Keep non-light-dismiss surfaces such as ContentDialog open.
+                    if (popup.IsLightDismissEnabled)
                     {
-                        // 忽略非 LightDismiss 的弹出层（如 ContentDialog 本身、及其半透明黑色遮罩 SmokeLayer）
-                        // 只有像 ComboBox 的下拉菜单这种默认开启 LightDismiss 的 Popup 才需要我们在这里强制关闭。
-                        if (!popup.IsLightDismissEnabled)
-                        {
-                            continue;
-                        }
                         popup.IsOpen = false;
                     }
                 }
-            });
+            };
+
+            try
+            {
+                if (xamlHost.InvokeRequired)
+                {
+                    xamlHost.BeginInvoke(closePopups);
+                }
+                else
+                {
+                    closePopups();
+                }
+            }
+            catch (InvalidOperationException)
+            {
+                // Handle destruction can race with an outside click during shutdown.
+            }
         }
 
         private bool IsPointInXamlIsland(Point screenPoint)
@@ -388,16 +458,19 @@ namespace MicroWinUICore
                     return;
 
                 case WM_DPICHANGED:
-                    var suggestedRect = Marshal.PtrToStructure<Win32API.RECT>(m.LParam);
-                    Win32API.SetWindowPos(
-                        Handle,
-                        Win32API.HWND_TOP,
-                        suggestedRect.Left,
-                        suggestedRect.Top,
-                        suggestedRect.Right - suggestedRect.Left,
-                        suggestedRect.Bottom - suggestedRect.Top,
-                        Win32API.SWP_NOZORDER | Win32API.SWP_NOACTIVATE);
-                    UpdateCoreWindowPos();
+                    if (m.LParam != IntPtr.Zero && IsHandleCreated && !IsDisposed)
+                    {
+                        var suggestedRect = Marshal.PtrToStructure<Win32API.RECT>(m.LParam);
+                        Win32API.SetWindowPos(
+                            Handle,
+                            Win32API.HWND_TOP,
+                            suggestedRect.Left,
+                            suggestedRect.Top,
+                            suggestedRect.Right - suggestedRect.Left,
+                            suggestedRect.Bottom - suggestedRect.Top,
+                            Win32API.SWP_NOZORDER | Win32API.SWP_NOACTIVATE);
+                        UpdateCoreWindowPos();
+                    }
                     m.Result = IntPtr.Zero;
                     return;
 
@@ -459,7 +532,9 @@ namespace MicroWinUICore
 
         private static bool IsWindows10OrGreater(int build = -1)
         {
-            return Environment.OSVersion.Version.Major >= 10 && Environment.OSVersion.Version.Build >= build;
+            return Environment.OSVersion.Version.Major >= 10
+                && (build < 0 || Environment.OSVersion.Version.Build >= build);
         }
+
     }
 }
