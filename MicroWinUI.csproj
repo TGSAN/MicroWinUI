@@ -37,6 +37,11 @@
 		<None Include="Assets\Styles\SunValley.xaml" />
 	</ItemGroup>
 
+	<ItemGroup>
+		<!-- 仅带 x:Class 的页面参与代码生成，Assets 下资源字典只作为嵌入资源处理。 -->
+		<XamlCodeBehindPage Include="**\*.xaml" Exclude="App.xaml;Assets\**\*.xaml;microsoft-ui-xaml\**;WindowsAppSDK\**" />
+	</ItemGroup>
+
 	<!--
 	  把 XAML 压缩成 gzip 后作为嵌入资源编入 exe。
 	  XAML 文本压缩率很高（样式字典约 6%），可显著减小产物体积。
@@ -47,26 +52,42 @@
 		     这里显式使用 obj\配置\目标框架，避免临时文件回落到项目根目录。 -->
 		<_CompressedXamlDir>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\CompressedXaml\</_CompressedXamlDir>
 		<_CompressXamlScript>$(MSBuildThisFileDirectory)build\Compress-Xaml.ps1</_CompressXamlScript>
+		<_GeneratedXamlDir>$(MSBuildProjectDirectory)\obj\$(Configuration)\$(TargetFramework)\GeneratedXaml\</_GeneratedXamlDir>
+		<_GenerateXamlScript>$(MSBuildThisFileDirectory)build\Generate-XamlCodeBehind.ps1</_GenerateXamlScript>
 	</PropertyGroup>
+
+	<Target Name="GenerateXamlCodeBehind" BeforeTargets="CoreCompile">
+		<RemoveDir Directories="$(_GeneratedXamlDir)" />
+		<Exec
+			Command="powershell -NoProfile -File &quot;$(_GenerateXamlScript)&quot; -Source &quot;%(XamlCodeBehindPage.FullPath)&quot; -Output &quot;$(_GeneratedXamlDir)%(XamlCodeBehindPage.RecursiveDir)%(XamlCodeBehindPage.Filename).g.cs&quot; -RelativePath &quot;%(XamlCodeBehindPage.Identity)&quot;"
+			ContinueOnError="false" />
+		<ItemGroup>
+			<Compile Include="$(_GeneratedXamlDir)**\*.g.cs" AutoGen="true" DesignTime="true" />
+			<FileWrites Include="$(_GeneratedXamlDir)**\*.g.cs" />
+		</ItemGroup>
+	</Target>
 
 	<Target Name="CompressXamlResources" BeforeTargets="PrepareForBuild">
 		<ItemGroup>
-			<!-- 页面：项目根目录下的 *.xaml，排除 App.xaml（它是应用定义，不参与运行时加载） -->
-			<_XamlPageSource Include="*.xaml" Exclude="App.xaml" />
-			<_XamlStyleSource Include="Assets\*.xaml" />
-			<_XamlStyleSource Include="Assets\**\*.xaml" />
-			<_XamlSource Include="@(_XamlPageSource);@(_XamlStyleSource)" />
+			<!-- 页面与 Assets 下资源字典统一压缩，保留相对目录避免同名文件冲突。 -->
+			<_XamlCodeBehindPageSource Include="@(XamlCodeBehindPage)" />
+			<_XamlStyleSource Include="Assets\**\*.xaml" Exclude="microsoft-ui-xaml\**;WindowsAppSDK\**" />
+			<_XamlSource Include="@(_XamlCodeBehindPageSource);@(_XamlStyleSource)" />
 		</ItemGroup>
 
 		<Exec
-			Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(_CompressXamlScript)&quot; -Source &quot;%(_XamlSource.FullPath)&quot; -Destination &quot;$(_CompressedXamlDir)%(_XamlSource.Filename)%(_XamlSource.Extension).gz&quot;"
+			Command="powershell -NoProfile -File &quot;$(_CompressXamlScript)&quot; -Source &quot;%(_XamlSource.FullPath)&quot; -Destination &quot;$(_CompressedXamlDir)%(_XamlSource.RelativeDir)%(_XamlSource.Filename)%(_XamlSource.Extension).gz&quot;"
 			ContinueOnError="false" />
 
 		<ItemGroup>
-			<EmbeddedResource Include="$(_CompressedXamlDir)%(_XamlSource.Filename)%(_XamlSource.Extension).gz">
-				<LogicalName>MicroWinUI.Assets.%(_XamlSource.Filename)%(_XamlSource.Extension)</LogicalName>
+			<EmbeddedResource Include="$(_CompressedXamlDir)%(_XamlSource.RelativeDir)%(_XamlSource.Filename)%(_XamlSource.Extension).gz">
+				<LogicalName>MicroWinUI.Assets.%(_XamlSource.RelativeDir)%(_XamlSource.Filename)%(_XamlSource.Extension)</LogicalName>
 			</EmbeddedResource>
 		</ItemGroup>
+	</Target>
+
+	<Target Name="CleanGeneratedXaml" AfterTargets="Clean">
+		<RemoveDir Directories="$(_GeneratedXamlDir)" />
 	</Target>
 
 </Project>

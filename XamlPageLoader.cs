@@ -370,10 +370,12 @@ namespace MicroWinUI
         public static string ReadEmbeddedText(string fileName)
         {
             Assembly assembly = typeof(XamlPageLoader).Assembly;
+            string normalizedFileName = fileName.Replace('\\', '/').TrimStart('/');
 
             foreach (string resourceName in assembly.GetManifestResourceNames())
             {
-                if (resourceName.EndsWith(fileName, StringComparison.OrdinalIgnoreCase))
+                string normalizedResourceName = resourceName.Replace('\\', '/');
+                if (normalizedResourceName.EndsWith(normalizedFileName, StringComparison.OrdinalIgnoreCase))
                 {
                     using (Stream stream = assembly.GetManifestResourceStream(resourceName))
                     {
