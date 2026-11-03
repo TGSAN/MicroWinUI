@@ -38,7 +38,9 @@ namespace MicroWinUI
             XDocument document = XDocument.Parse(xaml);
             XElement rootElement = document.Root;
 
-            // 事件属性在 XamlReader 里不会被解析，先摘出来，稍后按方法名挂接。
+            ResolveConditionalNamespaces(rootElement);
+
+            // 事件属性在 XamlReader 里不会被解析
             // 没有 x:Name 的元素补一个临时名字，便于加载后在树里定位。
             var eventBindings = ExtractEventBindings(page.GetType(), rootElement);
 
@@ -59,6 +61,119 @@ namespace MicroWinUI
             AttachEventHandlers(page, loaded, eventBindings);
             TransferContent(page, loaded);
             ApplyDeferredProperties(page, deferredProperties);
+        }
+
+        /// <summary>
+        /// 预先求值条件 XAML（如 xmlns:p="...presentation?IsApiContractPresent(...)"），
+        /// 去掉条件不成立的元素/属性，把成立的改写回默认命名空间。
+        /// 编译为 XBF 时由工具链处理；直接交给 XamlReader 在旧系统上会解析失败甚至崩溃。
+        /// </summary>
+        public static string ResolveConditionalNamespaces(string xaml)
+        {
+            XDocument document = XDocument.Parse(xaml, LoadOptions.PreserveWhitespace);
+            ResolveConditionalNamespaces(document.Root);
+            return document.ToString(SaveOptions.DisableFormatting);
+        }
+
+        private static void ResolveConditionalNamespaces(XElement rootElement)
+        {
+            var conditions = new Dictionary<string, KeyValuePair<string, bool>>();
+
+            foreach (XElement element in rootElement.DescendantsAndSelf())
+            {
+                foreach (XAttribute declaration in element.Attributes().Where(a => a.IsNamespaceDeclaration).ToList())
+                {
+                    string uri = declaration.Value;
+                    int separator = uri.IndexOf('?');
+                    if (separator < 0)
+                    {
+                        continue;
+                    }
+
+                    if (!conditions.ContainsKey(uri))
+                    {
+                        conditions[uri] = new KeyValuePair<string, bool>(
+                            uri.Substring(0, separator),
+                            EvaluateCondition(uri.Substring(separator + 1)));
+                    }
+
+                    declaration.Remove();
+                }
+            }
+
+            if (conditions.Count == 0)
+            {
+                return;
+            }
+
+            rootElement.Descendants()
+                .Where(e => conditions.TryGetValue(e.Name.NamespaceName, out var c) && !c.Value)
+                .ToList()
+                .ForEach(e => { if (e.Parent != null) e.Remove(); });
+
+            foreach (XElement element in rootElement.DescendantsAndSelf().ToList())
+            {
+                if (conditions.TryGetValue(element.Name.NamespaceName, out var elementCondition))
+                {
+                    element.Name = XName.Get(element.Name.LocalName, elementCondition.Key);
+                }
+
+                foreach (XAttribute attribute in element.Attributes().ToList())
+                {
+                    if (!conditions.TryGetValue(attribute.Name.NamespaceName, out var attributeCondition))
+                    {
+                        continue;
+                    }
+
+                    attribute.Remove();
+                    if (attributeCondition.Value)
+                    {
+                        element.SetAttributeValue(attribute.Name.LocalName, attribute.Value);
+                    }
+                }
+            }
+        }
+
+        private static bool EvaluateCondition(string condition)
+        {
+            int open = condition.IndexOf('(');
+            int close = condition.LastIndexOf(')');
+            if (open < 0 || close < open)
+            {
+                throw new FormatException($"无法识别的条件 XAML 表达式：{condition}");
+            }
+
+            string method = condition.Substring(0, open).Trim();
+            string[] args = condition.Substring(open + 1, close - open - 1)
+                .Split(',')
+                .Select(s => s.Trim())
+                .ToArray();
+
+            bool negate = method.EndsWith("NotPresent", StringComparison.Ordinal);
+            if (negate)
+            {
+                method = method.Substring(0, method.Length - "NotPresent".Length) + "Present";
+            }
+
+            bool result;
+            switch (method)
+            {
+                case "IsApiContractPresent":
+                    result = args.Length >= 3
+                        ? Windows.Foundation.Metadata.ApiInformation.IsApiContractPresent(args[0], ushort.Parse(args[1]), ushort.Parse(args[2]))
+                        : Windows.Foundation.Metadata.ApiInformation.IsApiContractPresent(args[0], ushort.Parse(args[1]));
+                    break;
+                case "IsTypePresent":
+                    result = Windows.Foundation.Metadata.ApiInformation.IsTypePresent(args[0]);
+                    break;
+                case "IsPropertyPresent":
+                    result = Windows.Foundation.Metadata.ApiInformation.IsPropertyPresent(args[0], args[1]);
+                    break;
+                default:
+                    throw new FormatException($"不支持的条件 XAML 方法：{method}");
+            }
+
+            return negate ? !result : result;
         }
 
         /// <summary>

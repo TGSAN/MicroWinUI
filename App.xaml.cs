@@ -29,7 +29,7 @@ namespace MicroWinUI
                 return new ResourceDictionary();
             }
 
-            var styles = (ResourceDictionary)XamlReader.Load(xaml);
+            var styles = (ResourceDictionary)XamlReader.Load(XamlPageLoader.ResolveConditionalNamespaces(xaml));
 
             var root = new ResourceDictionary();
             root.MergedDictionaries.Add(styles);
