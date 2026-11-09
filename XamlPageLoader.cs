@@ -40,14 +40,15 @@ namespace MicroWinUI
 
             ResolveConditionalNamespaces(rootElement);
 
-            // 事件属性在 XamlReader 里不会被解析
+            // XamlReader 不接受 x:Class，只能在 LoadComponent 场景使用。
+            RemoveClassDirective(rootElement);
+
+            // 热重载需要与加载时一致、但仍保留事件属性的文档来做对比。
+            XElement hotReloadSnapshot = XamlHotReload.IsEnabled ? new XElement(rootElement) : null;
+
+            // 事件属性在 XamlReader 里不会被解析，先摘出来，稍后按方法名挂接。
             // 没有 x:Name 的元素补一个临时名字，便于加载后在树里定位。
             var eventBindings = ExtractEventBindings(page.GetType(), rootElement);
-
-            // XamlReader 不接受 x:Class，只能在 LoadComponent 场景使用。
-            rootElement.Attributes()
-                .Where(a => a.Name.LocalName == "Class" && a.Name.NamespaceName == XamlNamespace)
-                .Remove();
 
             // 带事件的元素上若把布尔属性设为 True（如 IsChecked），
             // XAML 编译器会在解析期触发对应事件；XamlReader 不会。
@@ -56,11 +57,22 @@ namespace MicroWinUI
 
             var loaded = (Page)XamlReader.Load(document.ToString());
 
-
-            BindNamedFields(page, loaded, rootElement);
+            BindNamedFields(page, rootElement, name => FindByName(loaded, name));
             AttachEventHandlers(page, loaded, eventBindings);
             TransferContent(page, loaded);
             ApplyDeferredProperties(page, deferredProperties);
+
+            if (hotReloadSnapshot != null)
+            {
+                XamlHotReload.Register(page, xamlFileName, hotReloadSnapshot);
+            }
+        }
+
+        internal static void RemoveClassDirective(XElement rootElement)
+        {
+            rootElement.Attributes()
+                .Where(a => a.Name.LocalName == "Class" && a.Name.NamespaceName == XamlNamespace)
+                .Remove();
         }
 
         /// <summary>
@@ -75,7 +87,7 @@ namespace MicroWinUI
             return document.ToString(SaveOptions.DisableFormatting);
         }
 
-        private static void ResolveConditionalNamespaces(XElement rootElement)
+        internal static void ResolveConditionalNamespaces(XElement rootElement)
         {
             var conditions = new Dictionary<string, KeyValuePair<string, bool>>();
 
@@ -179,7 +191,7 @@ namespace MicroWinUI
         /// <summary>
         /// 把 XAML 根元素上的外观属性与内容转移到目标页面上。
         /// </summary>
-        private static void TransferContent(Page page, Page loaded)
+        internal static void TransferContent(Page page, Page loaded)
         {
             page.Background = loaded.Background;
             page.Padding = loaded.Padding;
@@ -306,7 +318,7 @@ namespace MicroWinUI
             }
         }
 
-        private static bool IsEventHandler(MethodInfo method)
+        internal static bool IsEventHandler(MethodInfo method)
         {
             if (method.ReturnType != typeof(void))
             {
@@ -323,7 +335,7 @@ namespace MicroWinUI
         /// <summary>
         /// 按 x:Name 把加载出来的元素回填到页面实例的同名字段上。
         /// </summary>
-        private static void BindNamedFields(Page page, Page loaded, XElement rootElement)
+        internal static void BindNamedFields(Page page, XElement rootElement, Func<string, DependencyObject> findByName)
         {
             Type pageType = page.GetType();
 
@@ -344,7 +356,7 @@ namespace MicroWinUI
                     continue;
                 }
 
-                object target = FindByName(loaded, name);
+                object target = findByName(name);
                 if (target != null && field.FieldType.IsInstanceOfType(target))
                 {
                     field.SetValue(page, target);
@@ -360,32 +372,61 @@ namespace MicroWinUI
             foreach (EventBinding binding in bindings)
             {
                 object target = FindByName(loaded, binding.ElementName);
-                if (target == null)
+                if (target != null)
                 {
-                    continue;
-                }
-
-                EventInfo eventInfo = target.GetType().GetEvent(binding.EventName);
-                if (eventInfo == null)
-                {
-                    continue;
-                }
-
-                Delegate handler = Delegate.CreateDelegate(eventInfo.EventHandlerType, page, binding.Method, false);
-                if (handler == null)
-                {
-                    continue;
-                }
-
-                // WinRT 事件的 add 访问器返回 EventRegistrationToken 而非 void，
-                // EventInfo.AddEventHandler 会因此抛出 InvalidOperationException，
-                // 所以这里直接调用 add 方法。
-                MethodInfo addMethod = eventInfo.GetAddMethod(true);
-                if (addMethod != null)
-                {
-                    addMethod.Invoke(target, new object[] { handler });
+                    AttachEventHandler(page, target, binding.EventName, binding.Method);
                 }
             }
+        }
+
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<object, Dictionary<string, object>> EventTokens =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<object, Dictionary<string, object>>();
+
+        /// <summary>
+        /// 把页面上的方法挂到目标对象的事件上，并记下注册令牌，供热重载时摘除。
+        /// </summary>
+        internal static bool AttachEventHandler(Page page, object target, string eventName, MethodInfo method)
+        {
+            EventInfo eventInfo = target.GetType().GetEvent(eventName);
+            if (eventInfo == null)
+            {
+                return false;
+            }
+
+            Delegate handler = Delegate.CreateDelegate(eventInfo.EventHandlerType, page, method, false);
+            if (handler == null)
+            {
+                return false;
+            }
+
+            // WinRT 事件的 add 访问器返回 EventRegistrationToken 而非 void，
+            // EventInfo.AddEventHandler 会因此抛出 InvalidOperationException，
+            // 所以这里直接调用 add 方法。
+            MethodInfo addMethod = eventInfo.GetAddMethod(true);
+            if (addMethod == null)
+            {
+                return false;
+            }
+
+            object token = addMethod.Invoke(target, new object[] { handler });
+            EventTokens.GetOrCreateValue(target)[eventName] = token ?? handler;
+            return true;
+        }
+
+        /// <summary>
+        /// 摘除之前由 <see cref="AttachEventHandler"/> 挂上的处理器。
+        /// </summary>
+        internal static void DetachEventHandler(object target, string eventName)
+        {
+            if (!EventTokens.TryGetValue(target, out var tokens) || !tokens.TryGetValue(eventName, out object token))
+            {
+                return;
+            }
+
+            tokens.Remove(eventName);
+
+            MethodInfo removeMethod = target.GetType().GetEvent(eventName)?.GetRemoveMethod(true);
+            removeMethod?.Invoke(target, new[] { token });
         }
 
         private static string GetXName(XElement element)

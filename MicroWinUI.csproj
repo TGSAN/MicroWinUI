@@ -37,9 +37,18 @@
 		<None Include="Assets\Styles\SunValley.xaml" />
 	</ItemGroup>
 
+	<ItemGroup Condition="'$(Configuration)' == 'Debug'">
+		<!-- 本机调试时供 XamlHotReload 定位页面源文件；Release 不写入，热重载随之停用。 -->
+		<AssemblyMetadata Include="XamlHotReloadSourceRoot" Value="$(MSBuildProjectDirectory)" />
+	</ItemGroup>
+
 	<ItemGroup>
 		<!-- 仅带 x:Class 的页面参与代码生成，Assets 下资源字典只作为嵌入资源处理。 -->
 		<XamlCodeBehindPage Include="**\*.xaml" Exclude="App.xaml;Assets\**\*.xaml;microsoft-ui-xaml\**;WindowsAppSDK\**" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <Folder Include="obj\" />
 	</ItemGroup>
 
 	<!--
@@ -58,9 +67,7 @@
 
 	<Target Name="GenerateXamlCodeBehind" BeforeTargets="CoreCompile">
 		<RemoveDir Directories="$(_GeneratedXamlDir)" />
-		<Exec
-			Command="powershell -NoProfile -File &quot;$(_GenerateXamlScript)&quot; -Source &quot;%(XamlCodeBehindPage.FullPath)&quot; -Output &quot;$(_GeneratedXamlDir)%(XamlCodeBehindPage.RecursiveDir)%(XamlCodeBehindPage.Filename).g.cs&quot; -RelativePath &quot;%(XamlCodeBehindPage.Identity)&quot;"
-			ContinueOnError="false" />
+		<Exec Command="powershell -NoProfile -File &quot;$(_GenerateXamlScript)&quot; -Source &quot;%(XamlCodeBehindPage.FullPath)&quot; -Output &quot;$(_GeneratedXamlDir)%(XamlCodeBehindPage.RecursiveDir)%(XamlCodeBehindPage.Filename).g.cs&quot; -RelativePath &quot;%(XamlCodeBehindPage.Identity)&quot;" ContinueOnError="false" />
 		<ItemGroup>
 			<Compile Include="$(_GeneratedXamlDir)**\*.g.cs" AutoGen="true" DesignTime="true" />
 			<FileWrites Include="$(_GeneratedXamlDir)**\*.g.cs" />
@@ -75,9 +82,7 @@
 			<_XamlSource Include="@(_XamlCodeBehindPageSource);@(_XamlStyleSource)" />
 		</ItemGroup>
 
-		<Exec
-			Command="powershell -NoProfile -File &quot;$(_CompressXamlScript)&quot; -Source &quot;%(_XamlSource.FullPath)&quot; -Destination &quot;$(_CompressedXamlDir)%(_XamlSource.RelativeDir)%(_XamlSource.Filename)%(_XamlSource.Extension).gz&quot;"
-			ContinueOnError="false" />
+		<Exec Command="powershell -NoProfile -File &quot;$(_CompressXamlScript)&quot; -Source &quot;%(_XamlSource.FullPath)&quot; -Destination &quot;$(_CompressedXamlDir)%(_XamlSource.RelativeDir)%(_XamlSource.Filename)%(_XamlSource.Extension).gz&quot;" ContinueOnError="false" />
 
 		<ItemGroup>
 			<EmbeddedResource Include="$(_CompressedXamlDir)%(_XamlSource.RelativeDir)%(_XamlSource.Filename)%(_XamlSource.Extension).gz">
